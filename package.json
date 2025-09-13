@@ -1,0 +1,55 @@
+{
+  "name": "kilocode-automation",
+  "version": "1.0.0",
+  "description": "Automated Kilocode registration system with Google account creation and bonus collection",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js",
+    "test:env": "node tests/test-environment.js",
+    "test:proxy": "node tests/test-proxy.js",
+    "test:google": "node tests/test-google.js",
+    "test:kilocode": "node tests/test-kilocode.js",
+    "test:int": "node tests/test-integration.js",
+    "test": "npm run test:env && npm run test:proxy && npm run test:google && npm run test:kilocode && npm run test:int",
+    "dev": "node --inspect src/main.js",
+    "clean": "rimraf logs/* && rimraf temp/*"
+  },
+  "keywords": [
+    "automation",
+    "puppeteer",
+    "google-oauth",
+    "kilocode",
+    "registration",
+    "stealth"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "puppeteer": "^21.6.1",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "puppeteer-extra-plugin-user-preferences": "^2.4.1",
+    "axios": "^1.6.2",
+    "winston": "^3.11.0",
+    "winston-daily-rotate-file": "^4.7.1",
+    "dotenv": "^16.3.1",
+    "faker": "^5.5.3",
+    "delay": "^5.0.0",
+    "random-useragent": "^0.5.0",
+    "proxy-agent": "^6.3.1",
+    "proxy-chain": "^2.4.0",
+    "https-proxy-agent": "^7.0.2",
+    "2captcha": "^2.0.3",
+    "cheerio": "^1.0.0-rc.12",
+    "fs-extra": "^11.2.0",
+    "commander": "^11.1.0",
+    "chalk": "^4.1.2"
+  },
+  "devDependencies": {
+    "rimraf": "^5.0.5",
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

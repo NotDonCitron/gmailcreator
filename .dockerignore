@@ -1,0 +1,50 @@
+# Dependencies and caches
+node_modules
+npm-debug.log*
+yarn.lock
+.pnpm-store/
+.cache/
+.tmp/
+
+# VCS and editor files
+.git
+.gitignore
+.gitattributes
+.vscode/
+.idea/
+
+# Local env and secrets
+.env
+.env.*
+!.env.example
+
+# Logs and temp artifacts
+logs/
+logs*/ 
+logsbatches/
+logsregistrations/
+temp/
+temp*/ 
+tempprofiles/
+tempscreenshots/
+
+# Test and docs not needed in runtime image
+tests/
+docs/
+TESTING.md
+README.md
+DEPLOYMENT.md
+IMPLEMENTATION_FIXES.md
+CLAUDE.md
+checke los wegen autom,atisiewrung von Registrieru.md
+
+# Tooling metadata
+.claude/
+.clinerules/
+.kilocode/
+.qoder/
+.roo/
+
+# OS files
+.DS_Store
+Thumbs.db
