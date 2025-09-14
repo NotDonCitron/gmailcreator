@@ -1,0 +1,760 @@
+{
+  "repositories": [
+    {
+      "name": "vscode",
+      "url": "https://github.com/microsoft/vscode",
+      "description": "Visual Studio Code - Open source code editor",
+      "branch": "main",
+      "local_path": "./external_repos/vscode",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "high",
+      "categories": ["editor", "ide", "typescript", "electron"],
+      "tags": ["microsoft", "vscode", "editor", "development"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "large",
+      "language_distribution": {
+        "typescript": 70,
+        "javascript": 20,
+        "other": 10
+      }
+    },
+    {
+      "name": "react",
+      "url": "https://github.com/facebook/react",
+      "description": "React - A declarative, efficient, and flexible JavaScript library for building user interfaces",
+      "branch": "main",
+      "local_path": "./external_repos/react",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "high",
+      "categories": ["frontend", "javascript", "library", "ui"],
+      "tags": ["facebook", "react", "javascript", "frontend"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "large",
+      "language_distribution": {
+        "javascript": 80,
+        "typescript": 15,
+        "other": 5
+      }
+    },
+    {
+      "name": "tensorflow",
+      "url": "https://github.com/tensorflow/tensorflow",
+      "description": "TensorFlow - An Open Source Machine Learning Framework for Everyone",
+      "branch": "master",
+      "local_path": "./external_repos/tensorflow",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "medium",
+      "categories": ["machine-learning", "python", "framework", "ai"],
+      "tags": ["google", "tensorflow", "ml", "deep-learning"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "very-large",
+      "language_distribution": {
+        "python": 60,
+        "c++": 25,
+        "other": 15
+      }
+    },
+    {
+      "name": "django",
+      "url": "https://github.com/django/django",
+      "description": "Django - The Web framework for perfectionists with deadlines",
+      "branch": "main",
+      "local_path": "./external_repos/django",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "medium",
+      "categories": ["web-framework", "python", "backend"],
+      "tags": ["django", "python", "web", "framework"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "large",
+      "language_distribution": {
+        "python": 95,
+        "other": 5
+      }
+    },
+    {
+      "name": "spring-boot",
+      "url": "https://github.com/spring-projects/spring-boot",
+      "description": "Spring Boot - Convention over configuration for Spring",
+      "branch": "main",
+      "local_path": "./external_repos/spring-boot",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "medium",
+      "categories": ["web-framework", "java", "backend", "spring"],
+      "tags": ["spring", "java", "boot", "framework"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "large",
+      "language_distribution": {
+        "java": 85,
+        "kotlin": 10,
+        "other": 5
+      }
+    },
+    {
+      "name": "nodejs",
+      "url": "https://github.com/nodejs/node",
+      "description": "Node.js - JavaScript runtime built on Chrome's V8 JavaScript engine",
+      "branch": "main",
+      "local_path": "./external_repos/nodejs",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "medium",
+      "categories": ["runtime", "javascript", "server", "v8"],
+      "tags": ["nodejs", "javascript", "runtime", "server"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "very-large",
+      "language_distribution": {
+        "javascript": 70,
+        "c++": 20,
+        "python": 5,
+        "other": 5
+      }
+    },
+    {
+      "name": "vue",
+      "url": "https://github.com/vuejs/vue",
+      "description": "Vue.js - A progressive, incrementally-adoptable JavaScript framework for building UI on the web",
+      "branch": "main",
+      "local_path": "./external_repos/vue",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "medium",
+      "categories": ["frontend", "javascript", "framework", "ui"],
+      "tags": ["vue", "javascript", "framework", "frontend"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "large",
+      "language_distribution": {
+        "javascript": 90,
+        "typescript": 5,
+        "other": 5
+      }
+    },
+    {
+      "name": "angular",
+      "url": "https://github.com/angular/angular",
+      "description": "Angular - The modern web developer's platform",
+      "branch": "main",
+      "local_path": "./external_repos/angular",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "medium",
+      "categories": ["frontend", "typescript", "framework", "ui"],
+      "tags": ["angular", "typescript", "framework", "google"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "large",
+      "language_distribution": {
+        "typescript": 85,
+        "javascript": 10,
+        "other": 5
+      }
+    },
+    {
+      "name": "fastapi",
+      "url": "https://github.com/tiangolo/fastapi",
+      "description": "FastAPI - Modern, fast (high-performance), web framework for building APIs with Python 3.7+ based on standard Python type hints",
+      "branch": "master",
+      "local_path": "./external_repos/fastapi",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "medium",
+      "categories": ["web-framework", "python", "backend", "api"],
+      "tags": ["fastapi", "python", "api", "async"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "medium",
+      "language_distribution": {
+        "python": 95,
+        "other": 5
+      }
+    },
+    {
+      "name": "rust",
+      "url": "https://github.com/rust-lang/rust",
+      "description": "Rust - Empowering everyone to build reliable and efficient software",
+      "branch": "master",
+      "local_path": "./external_repos/rust",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["language", "compiler", "systems", "rust"],
+      "tags": ["rust", "compiler", "systems", "mozilla"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "very-large",
+      "language_distribution": {
+        "rust": 80,
+        "c++": 15,
+        "other": 5
+      }
+    },
+    {
+      "name": "kubernetes",
+      "url": "https://github.com/kubernetes/kubernetes",
+      "description": "Kubernetes - Production-Grade Container Scheduling and Management",
+      "branch": "master",
+      "local_path": "./external_repos/kubernetes",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["orchestration", "containers", "go", "cloud"],
+      "tags": ["kubernetes", "k8s", "containers", "google"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "very-large",
+      "language_distribution": {
+        "go": 85,
+        "other": 15
+      }
+    },
+    {
+      "name": "redis",
+      "url": "https://github.com/redis/redis",
+      "description": "Redis - In-memory data structure store, used as database, cache, and message broker",
+      "branch": "unstable",
+      "local_path": "./external_repos/redis",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["database", "cache", "c", "in-memory"],
+      "tags": ["redis", "cache", "database", "in-memory"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "large",
+      "language_distribution": {
+        "c": 80,
+        "tcl": 10,
+        "other": 10
+      }
+    },
+    {
+      "name": "elasticsearch",
+      "url": "https://github.com/elastic/elasticsearch",
+      "description": "Elasticsearch - Free and Open, Distributed, RESTful Search Engine",
+      "branch": "main",
+      "local_path": "./external_repos/elasticsearch",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["search", "java", "lucene", "distributed"],
+      "tags": ["elasticsearch", "search", "java", "elastic"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "very-large",
+      "language_distribution": {
+        "java": 90,
+        "other": 10
+      }
+    },
+    {
+      "name": "flutter",
+      "url": "https://github.com/flutter/flutter",
+      "description": "Flutter - Google's UI toolkit for building beautiful, natively compiled applications for mobile, web, and desktop from a single codebase",
+      "branch": "master",
+      "local_path": "./external_repos/flutter",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["mobile", "dart", "ui", "cross-platform"],
+      "tags": ["flutter", "dart", "mobile", "google"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "very-large",
+      "language_distribution": {
+        "dart": 70,
+        "c++": 20,
+        "java": 5,
+        "other": 5
+      }
+    },
+    {
+      "name": "pytorch",
+      "url": "https://github.com/pytorch/pytorch",
+      "description": "PyTorch - Tensors and Dynamic neural networks in Python with strong GPU acceleration",
+      "branch": "master",
+      "local_path": "./external_repos/pytorch",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["machine-learning", "python", "deep-learning", "ai"],
+      "tags": ["pytorch", "ml", "deep-learning", "facebook"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "very-large",
+      "language_distribution": {
+        "python": 60,
+        "c++": 30,
+        "cuda": 5,
+        "other": 5
+      }
+    },
+    {
+      "name": "scikit-learn",
+      "url": "https://github.com/scikit-learn/scikit-learn",
+      "description": "scikit-learn - Machine Learning in Python",
+      "branch": "main",
+      "local_path": "./external_repos/scikit-learn",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["machine-learning", "python", "statistics", "data-science"],
+      "tags": ["scikit-learn", "ml", "python", "statistics"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "large",
+      "language_distribution": {
+        "python": 95,
+        "cython": 3,
+        "other": 2
+      }
+    },
+    {
+      "name": "ansible",
+      "url": "https://github.com/ansible/ansible",
+      "description": "Ansible - Ansible is a radically simple IT automation platform that makes your applications and systems easier to deploy and maintain",
+      "branch": "devel",
+      "local_path": "./external_repos/ansible",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["automation", "python", "devops", "infrastructure"],
+      "tags": ["ansible", "automation", "python", "devops"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "large",
+      "language_distribution": {
+        "python": 90,
+        "other": 10
+      }
+    },
+    {
+      "name": "terraform",
+      "url": "https://github.com/hashicorp/terraform",
+      "description": "Terraform - Terraform enables you to safely and predictably create, change, and improve infrastructure",
+      "branch": "main",
+      "local_path": "./external_repos/terraform",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["infrastructure", "go", "iac", "cloud"],
+      "tags": ["terraform", "iac", "go", "hashicorp"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "large",
+      "language_distribution": {
+        "go": 95,
+        "other": 5
+      }
+    },
+    {
+      "name": "prometheus",
+      "url": "https://github.com/prometheus/prometheus",
+      "description": "Prometheus - The Prometheus monitoring system and time series database",
+      "branch": "main",
+      "local_path": "./external_repos/prometheus",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["monitoring", "go", "metrics", "time-series"],
+      "tags": ["prometheus", "monitoring", "go", "metrics"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "large",
+      "language_distribution": {
+        "go": 90,
+        "other": 10
+      }
+    },
+    {
+      "name": "grafana",
+      "url": "https://github.com/grafana/grafana",
+      "description": "Grafana - The open and composable observability and data visualization platform",
+      "branch": "main",
+      "local_path": "./external_repos/grafana",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["monitoring", "go", "visualization", "dashboard"],
+      "tags": ["grafana", "monitoring", "go", "visualization"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "large",
+      "language_distribution": {
+        "go": 70,
+        "typescript": 20,
+        "other": 10
+      }
+    },
+    {
+      "name": "nginx",
+      "url": "https://github.com/nginx/nginx",
+      "description": "nginx - An HTTP and reverse proxy server, a mail proxy server, and a generic TCP/UDP proxy server",
+      "branch": "master",
+      "local_path": "./external_repos/nginx",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["web-server", "c", "proxy", "load-balancer"],
+      "tags": ["nginx", "web-server", "c", "proxy"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "large",
+      "language_distribution": {
+        "c": 85,
+        "other": 15
+      }
+    },
+    {
+      "name": "postgresql",
+      "url": "https://github.com/postgres/postgres",
+      "description": "PostgreSQL - Mirror of the official PostgreSQL GIT repository",
+      "branch": "master",
+      "local_path": "./external_repos/postgresql",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["database", "sql", "postgresql", "relational"],
+      "tags": ["postgresql", "database", "sql", "postgres"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "very-large",
+      "language_distribution": {
+        "c": 70,
+        "sql": 20,
+        "other": 10
+      }
+    },
+    {
+      "name": "mysql",
+      "url": "https://github.com/mysql/mysql-server",
+      "description": "MySQL Server - The world's most popular open source database",
+      "branch": "trunk",
+      "local_path": "./external_repos/mysql-server",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["database", "sql", "mysql", "relational"],
+      "tags": ["mysql", "database", "sql", "oracle"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "very-large",
+      "language_distribution": {
+        "c++": 60,
+        "c": 30,
+        "other": 10
+      }
+    },
+    {
+      "name": "mongodb",
+      "url": "https://github.com/mongodb/mongo",
+      "description": "MongoDB - The MongoDB Database",
+      "branch": "master",
+      "local_path": "./external_repos/mongo",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["database", "nosql", "mongodb", "document"],
+      "tags": ["mongodb", "database", "nosql", "document"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "very-large",
+      "language_distribution": {
+        "c++": 80,
+        "javascript": 10,
+        "python": 5,
+        "other": 5
+      }
+    },
+    {
+      "name": "docker",
+      "url": "https://github.com/docker/docker",
+      "description": "Docker - Moby Project - a collaborative project for the container ecosystem to assemble container-based systems",
+      "branch": "master",
+      "local_path": "./external_repos/docker",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["containers", "go", "docker", "moby"],
+      "tags": ["docker", "containers", "go", "moby"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "very-large",
+      "language_distribution": {
+        "go": 85,
+        "other": 15
+      }
+    },
+    {
+      "name": "kubernetes-client",
+      "url": "https://github.com/kubernetes-client/python",
+      "description": "Kubernetes Python Client - Official Python client library for kubernetes",
+      "branch": "master",
+      "local_path": "./external_repos/kubernetes-client-python",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["kubernetes", "python", "client", "api"],
+      "tags": ["kubernetes", "python", "client", "k8s"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "medium",
+      "language_distribution": {
+        "python": 95,
+        "other": 5
+      }
+    },
+    {
+      "name": "requests",
+      "url": "https://github.com/psf/requests",
+      "description": "Requests - A simple, yet elegant, HTTP library",
+      "branch": "main",
+      "local_path": "./external_repos/requests",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["http", "python", "library", "api"],
+      "tags": ["requests", "http", "python", "library"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "small",
+      "language_distribution": {
+        "python": 98,
+        "other": 2
+      }
+    },
+    {
+      "name": "flask",
+      "url": "https://github.com/pallets/flask",
+      "description": "Flask - The Python micro framework for building web applications",
+      "branch": "main",
+      "local_path": "./external_repos/flask",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["web-framework", "python", "micro-framework"],
+      "tags": ["flask", "python", "web", "micro-framework"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "medium",
+      "language_distribution": {
+        "python": 95,
+        "other": 5
+      }
+    },
+    {
+      "name": "pandas",
+      "url": "https://github.com/pandas-dev/pandas",
+      "description": "pandas - Flexible and powerful data analysis / manipulation library for Python",
+      "branch": "main",
+      "local_path": "./external_repos/pandas",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["data-analysis", "python", "library", "data-science"],
+      "tags": ["pandas", "data-analysis", "python", "data-science"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "large",
+      "language_distribution": {
+        "python": 90,
+        "cython": 8,
+        "other": 2
+      }
+    },
+    {
+      "name": "numpy",
+      "url": "https://github.com/numpy/numpy",
+      "description": "NumPy - The fundamental package for scientific computing with Python",
+      "branch": "main",
+      "local_path": "./external_repos/numpy",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["scientific-computing", "python", "library", "mathematics"],
+      "tags": ["numpy", "scientific-computing", "python", "mathematics"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "large",
+      "language_distribution": {
+        "python": 70,
+        "c": 25,
+        "cython": 3,
+        "other": 2
+      }
+    },
+    {
+      "name": "matplotlib",
+      "url": "https://github.com/matplotlib/matplotlib",
+      "description": "matplotlib - matplotlib: plotting with Python",
+      "branch": "main",
+      "local_path": "./external_repos/matplotlib",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["plotting", "python", "visualization", "data-science"],
+      "tags": ["matplotlib", "plotting", "python", "visualization"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "large",
+      "language_distribution": {
+        "python": 95,
+        "other": 5
+      }
+    },
+    {
+      "name": "seaborn",
+      "url": "https://github.com/mwaskom/seaborn",
+      "description": "seaborn - Statistical data visualization in Python",
+      "branch": "master",
+      "local_path": "./external_repos/seaborn",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["plotting", "python", "visualization", "statistics"],
+      "tags": ["seaborn", "plotting", "python", "statistics"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "medium",
+      "language_distribution": {
+        "python": 98,
+        "other": 2
+      }
+    },
+    {
+      "name": "plotly",
+      "url": "https://github.com/plotly/plotly.py",
+      "description": "Plotly.py - The interactive graphing library for Python",
+      "branch": "master",
+      "local_path": "./external_repos/plotly.py",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["plotting", "python", "interactive", "visualization"],
+      "tags": ["plotly", "plotting", "python", "interactive"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "large",
+      "language_distribution": {
+        "python": 95,
+        "javascript": 3,
+        "other": 2
+      }
+    },
+    {
+      "name": "jupyter",
+      "url": "https://github.com/jupyter/notebook",
+      "description": "Jupyter Notebook - Jupyter Interactive Notebook",
+      "branch": "main",
+      "local_path": "./external_repos/jupyter-notebook",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["notebook", "python", "interactive", "data-science"],
+      "tags": ["jupyter", "notebook", "python", "interactive"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "large",
+      "language_distribution": {
+        "python": 90,
+        "javascript": 5,
+        "other": 5
+      }
+    },
+    {
+      "name": "streamlit",
+      "url": "https://github.com/streamlit/streamlit",
+      "description": "Streamlit - Streamlit — A faster way to build and share data apps",
+      "branch": "develop",
+      "local_path": "./external_repos/streamlit",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["dashboard", "python", "data-apps", "visualization"],
+      "tags": ["streamlit", "dashboard", "python", "data-apps"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "large",
+      "language_distribution": {
+        "python": 70,
+        "typescript": 20,
+        "javascript": 5,
+        "other": 5
+      }
+    },
+    {
+      "name": "gradio",
+      "url": "https://github.com/gradio-app/gradio",
+      "description": "Gradio - Build and share delightful machine learning apps, all in Python",
+      "branch": "main",
+      "local_path": "./external_repos/gradio",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["ml-interface", "python", "machine-learning", "ui"],
+      "tags": ["gradio", "ml", "python", "interface"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "large",
+      "language_distribution": {
+        "python": 75,
+        "typescript": 15,
+        "javascript": 5,
+        "other": 5
+      }
+    },
+    {
+      "name": "chainlit",
+      "url": "https://github.com/Chainlit/chainlit",
+      "description": "Chainlit - Build Python LLM apps in minutes ⚡️",
+      "branch": "main",
+      "local_path": "./external_repos/chainlit",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["llm-interface", "python", "chainlit", "ai"],
+      "tags": ["chainlit", "llm", "python", "interface"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "medium",
+      "language_distribution": {
+        "python": 80,
+        "typescript": 15,
+        "javascript": 3,
+        "other": 2
+      }
+    },
+    {
+      "name": "langchain",
+      "url": "https://github.com/langchain-ai/langchain",
+      "description": "LangChain - Build context-aware reasoning applications",
+      "branch": "master",
+      "local_path": "./external_repos/langchain",
+      "auto_clone": false,
+      "auto_update": false,
+      "priority": "low",
+      "categories": ["llm-framework", "python", "langchain", "ai"],
+      "tags": ["langchain", "llm", "python", "framework"],
+      "last_indexed": null,
+      "index_status": "pending",
+      "size_estimate": "very-large",
+      "language_distribution": {
+        "python": 90,
+        "typescript": 5,
+        "javascript": 3,
+        "other": 2
+      }
+    },
+    {
+      "name": "llamaindex",
+      "url": "https

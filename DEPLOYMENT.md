@@ -189,6 +189,9 @@ Incident:
 
 ## Change Management
 
+For more detailed information, see:
+- [Troubleshooting Guide](./TROUBLESHOOTING.md) for solving problems
+
 - Use feature branches and PR reviews
 - Update `TESTING.md` with new acceptance criteria
 - Tag releases, maintain changelog

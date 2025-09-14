@@ -485,7 +485,7 @@ fi
 **Happy Automating!** 🚀
 
 For more detailed information, see:
-- [API Reference](API_REFERENCE.md) for programmatic usage
-- [Troubleshooting Guide](TROUBLESHOOTING.md) for solving problems
-- [Deployment Guide](DEPLOYMENT.md) for production setup
+- [API Reference](./API_REFERENCE.md) for programmatic usage
+- [Troubleshooting Guide](./TROUBLESHOOTING.md) for solving problems
+- [Deployment Guide](./DEPLOYMENT.md) for production setup
 - [Testing Guide](../TESTING.md) for test strategy and commands

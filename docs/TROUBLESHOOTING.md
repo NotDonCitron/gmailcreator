@@ -215,10 +215,10 @@ Q: Can I run a dry run without creating any accounts?
 - Yes. Use `--dry-run` or pass `dryRun: true` with `skipAccountCreation` and `skipKilocodeRegistration`. The flow will launch and close a browser and return a `dry_run_completed` status.
 
 Q: Where do I find API usage?
-- See API Reference at `docs/API_REFERENCE.md`.
+- See [API Reference](./API_REFERENCE.md).
 
 Q: How do I deploy to production?
-- See `DEPLOYMENT.md` for hardening, scaling, monitoring, and security guidance.
+- See [Deployment Guide](./DEPLOYMENT.md) for hardening, scaling, monitoring, and security guidance.
 
 Q: Where is a test overview?
-- See `TESTING.md` for strategy, commands, and acceptance criteria.
+- See [Testing Guide](../TESTING.md) for strategy, commands, and acceptance criteria.

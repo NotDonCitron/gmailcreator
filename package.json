@@ -25,29 +25,29 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "puppeteer": "^21.6.1",
+    "2captcha": "^2.0.3",
+    "axios": "^1.6.2",
+    "chalk": "^4.1.2",
+    "cheerio": "^1.0.0-rc.12",
+    "commander": "^11.1.0",
+    "delay": "^5.0.0",
+    "dotenv": "^16.3.1",
+    "faker": "^5.5.3",
+    "fs-extra": "^11.2.0",
+    "https-proxy-agent": "^7.0.2",
+    "proxy-agent": "^6.3.1",
+    "proxy-chain": "^2.4.0",
+    "puppeteer": "^24.20.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "puppeteer-extra-plugin-user-preferences": "^2.4.1",
-    "axios": "^1.6.2",
-    "winston": "^3.11.0",
-    "winston-daily-rotate-file": "^4.7.1",
-    "dotenv": "^16.3.1",
-    "faker": "^5.5.3",
-    "delay": "^5.0.0",
     "random-useragent": "^0.5.0",
-    "proxy-agent": "^6.3.1",
-    "proxy-chain": "^2.4.0",
-    "https-proxy-agent": "^7.0.2",
-    "2captcha": "^2.0.3",
-    "cheerio": "^1.0.0-rc.12",
-    "fs-extra": "^11.2.0",
-    "commander": "^11.1.0",
-    "chalk": "^4.1.2"
+    "winston": "^3.11.0",
+    "winston-daily-rotate-file": "^4.7.1"
   },
   "devDependencies": {
-    "rimraf": "^5.0.5",
-    "nodemon": "^3.0.2"
+    "nodemon": "^3.0.2",
+    "rimraf": "^5.0.5"
   },
   "engines": {
     "node": ">=16.0.0"

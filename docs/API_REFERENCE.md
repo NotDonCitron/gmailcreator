@@ -180,6 +180,10 @@ Notes:
 
 ## Usage Examples
 
+For more detailed information, see:
+- [Troubleshooting Guide](./TROUBLESHOOTING.md) for solving problems
+- [Deployment Guide](./DEPLOYMENT.md) for production setup
+
 Programmatic single registration:
 ```javascript
 const KilocodeAutomation = require('./src/main');

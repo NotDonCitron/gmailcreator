@@ -336,6 +336,12 @@ kilocode-automation/
 
 ## Next Steps
 
+For more detailed information, see:
+- [Usage Guide](./USAGE_GUIDE.md) for operation instructions
+- [API Reference](./API_REFERENCE.md) for programmatic usage
+- [Troubleshooting Guide](./TROUBLESHOOTING.md) for solving problems
+- [Deployment Guide](./DEPLOYMENT.md) for production setup
+
 After successful setup:
 
 1. **Read the Usage Guide**: [USAGE_GUIDE.md](USAGE_GUIDE.md)
