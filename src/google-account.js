@@ -14,9 +14,10 @@ class GoogleAccount {
         this.delayMax = parseInt(process.env.GOOGLE_SIGNUP_DELAY_MAX) || 15000;
     }
 
-    async create(browser, userData) {
+    async create(browser, userData, options = {}) {
         let page = null;
         let retryCount = 0;
+        const { debugMode = false } = options;
 
         while (retryCount < this.maxRetries) {
             try {
@@ -60,16 +61,23 @@ class GoogleAccount {
                 logger.error(`❌ Google account creation attempt ${retryCount} failed:`, error.message);
 
                 if (retryCount >= this.maxRetries) {
+                    if (debugMode && page) {
+                        logger.warn('🚨 DEBUG MODE: Keeping browser open for manual inspection. Close manually when done.');
+                        // Don't close the page in debug mode so user can inspect
+                        throw new Error(`Failed to create Google account after ${this.maxRetries} attempts: ${error.message}`);
+                    }
                     throw new Error(`Failed to create Google account after ${this.maxRetries} attempts: ${error.message}`);
                 }
 
-                // Close page before retry
-                if (page) {
+                // Close page before retry (unless in debug mode and final failure)
+                if (page && !debugMode) {
                     try {
                         await page.close();
                     } catch (closeError) {
                         logger.warn('Failed to close page:', closeError.message);
                     }
+                } else if (debugMode && page) {
+                    logger.info('🚨 DEBUG MODE: Keeping page open for inspection during retry');
                 }
 
                 // Wait before retry
@@ -126,15 +134,54 @@ class GoogleAccount {
         logger.debug('Filling basic account information...');
 
         // Wait for first name field
-        await page.waitForSelector('#firstName', { timeout: 15000 });
+        const firstNameSelectors = [
+            '#firstName',
+            'input[name="firstName"]',
+            'input[aria-label*="First name" i]',
+            'input[autocomplete="given-name"]'
+        ];
+        const lastNameSelectors = [
+            '#lastName',
+            'input[name="lastName"]',
+            'input[aria-label*="Last name" i]',
+            'input[autocomplete="family-name"]'
+        ];
+        
+        // Wait for any first name field to appear
+        let firstNameSelectorFound = null;
+        for (const sel of firstNameSelectors) {
+            if (await page.$(sel)) {
+                firstNameSelectorFound = sel;
+                break;
+            }
+        }
+        
+        if (!firstNameSelectorFound) {
+            throw new Error('First name field not found');
+        }
 
         // Fill first and last name
-        await this.typeHumanLike(page, '#firstName', userData.firstName);
+        await this.typeHumanLike(page, firstNameSelectorFound, userData.firstName);
         await this.delay(this.randomDelay(400, 900));
-        await this.typeHumanLike(page, '#lastName', userData.lastName);
+        
+        // Find and fill last name
+        let lastNameSelectorFound = null;
+        for (const sel of lastNameSelectors) {
+            if (await page.$(sel)) {
+                lastNameSelectorFound = sel;
+                break;
+            }
+        }
+        
+        if (!lastNameSelectorFound) {
+            throw new Error('Last name field not found');
+        }
+        
+        await this.typeHumanLike(page, lastNameSelectorFound, userData.lastName);
         await this.delay(this.randomDelay(400, 900));
 
         // Try to locate a username field on this step; flows vary by region/UI
+        // Updated selectors based on current Google signup page structure
         const usernameCandidates = [
             '#username',
             'input[name="Username"]',
@@ -142,7 +189,19 @@ class GoogleAccount {
             'input[type="email"][name="Username"]',
             'input[type="email"][name="username"]',
             'input[aria-label*="username" i]',
-            'input[aria-label*="gmail address" i]'
+            'input[aria-label*="gmail address" i]',
+            'input[autocomplete="username"]',
+            'input[aria-label*="Choose your username"]',
+            'input[aria-label*="Choose a Gmail address"]',
+            'input[data-initial-value][name="Username"]',
+            'input[jscontroller][name="Username"]',
+            'input[placeholder*="username" i]',
+            // New: Email/Phone collection step
+            '#emailPhone',
+            'input[name="emailPhone"]',
+            'input[aria-label*="Email address or phone number" i]',
+            'input[aria-label*="email address" i]',
+            'input[autocomplete="off"][aria-label*="email" i]'
         ];
         let usernameSelectorFound = null;
         for (const sel of usernameCandidates) {
@@ -155,13 +214,107 @@ class GoogleAccount {
 
         // If username field is not present yet, proceed to next step until it appears or timeout
         if (!usernameSelectorFound) {
-            // Some flows require clicking a generic "Next" after name to reach username/password page
             logger.debug('Username field not present on current step, attempting to advance...');
+            
+            // First, try to click "Don't have an email address or phone number?" button
+            try {
+                // First try specific selectors for the button
+                const noEmailSelectors = [
+                    'button[jsname="Ebwmjd"]',
+                    'button[jsaction*="wufpNd"]',
+                    'button:has-text("Don\'t have an email address or phone number?")',
+                ];
+
+                let foundButton = false;
+                for (const selector of noEmailSelectors) {
+                    try {
+                        const btn = await page.$(selector);
+                        if (btn) {
+                            logger.debug(`Clicking "Don't have email" button: ${selector}`);
+                            await page.click(selector);
+                            foundButton = true;
+                            break;
+                        }
+                    } catch (_e) {}
+                }
+
+                // Fallback: search by text content
+                if (!foundButton) {
+                    await page.evaluate(() => {
+                        const nodes = [...document.querySelectorAll('a,button,div[role="button"],span[role="button"]')];
+                        const btnOrLink = nodes.find(el => {
+                            const t = (el.innerText || el.textContent || '').toLowerCase().trim();
+                            return (
+                                // Exact text match first
+                                t.includes("don't have an email address or phone number") ||
+                                // German text options
+                                t.includes("ich habe keine e-mail-adresse") ||
+                                t.includes("keine e-mail-adresse") ||
+                                t.includes("ich habe keine mail") ||
+                                t.includes("neue gmail-adresse erstellen") ||
+                                // English text options
+                                t.includes("i don't have an email") ||
+                                t.includes("don't have an email") ||
+                                t.includes('create your own gmail address') ||
+                                t.includes('create a gmail address') ||
+                                t.includes('create your gmail address') ||
+                                t.includes('gmail address instead') ||
+                                t.includes('use a gmail address') ||
+                                t.includes('use a gmail address instead') ||
+                                t.includes('create a new gmail address')
+                            );
+                        });
+                        if (btnOrLink) {
+                            console.log('Found "no email" or "create gmail" button:', btnOrLink.textContent);
+                            btnOrLink.click();
+                            return true;
+                        }
+                        return false;
+                    });
+                }
+
+                await this.delay(this.randomDelay(1500, 2500));
+            } catch (_e) {}
+
+            // After clicking "Don't have email", look for "Create own Gmail" radio button
+            try {
+                const createOwnGmailSelectors = [
+                    'input[type="radio"][value="custom"]',
+                    'input[name="usernameRadio"][value="custom"]',
+                    'input[aria-label*="Create your own Gmail" i]',
+                    'input[aria-label*="Create own Gmail" i]',
+                    'input[jsname="YPqjbf"]'
+                ];
+
+                let foundRadio = false;
+                for (const selector of createOwnGmailSelectors) {
+                    try {
+                        const radio = await page.$(selector);
+                        if (radio) {
+                            logger.debug(`Clicking "Create own Gmail" radio button: ${selector}`);
+                            await page.click(selector);
+                            foundRadio = true;
+                            break;
+                        }
+                    } catch (_e) {}
+                }
+
+                if (foundRadio) {
+                    await this.delay(this.randomDelay(1000, 2000));
+                }
+            } catch (_e) {}
+
+            // Try to advance with Next button
             const possibleNexts = [
                 '#collectNameNext',
                 '#accountDetailsNext',
                 'button[jsname="LgbsSe"]',
-                'div[role="button"][jsname="LgbsSe"]'
+                'div[role="button"][jsname="LgbsSe"]',
+                'button[type="button"][data-is-primary]',
+                'button[class*="VfPpkd-LgbsSe"]',
+                'div[role="button"][class*="VfPpkd-LgbsSe"]',
+                'button[aria-label="Next"]',
+                'div[role="button"][aria-label="Next"]'
             ];
 
             let clickedNext = false;
@@ -174,26 +327,6 @@ class GoogleAccount {
                     break;
                 }
             }
-
-            // In some UIs there is a link to toggle Gmail vs current email; try to reveal Gmail username
-            try {
-                await page.evaluate(() => {
-                    const nodes = [...document.querySelectorAll('a,button,div[role="button"]')];
-                    const btnOrLink = nodes.find(el => {
-                        const t = (el.innerText || el.textContent || '').toLowerCase().trim();
-                        return (
-                            t.includes('create your own gmail address') ||
-                            t.includes('create a gmail address') ||
-                            t.includes('create your gmail address') ||
-                            t.includes('gmail address instead') ||
-                            t.includes('use a gmail address') ||
-                            t.includes('use a gmail address instead')
-                        );
-                    });
-                    if (btnOrLink) btnOrLink.click();
-                });
-                await this.delay(this.randomDelay(800, 1500));
-            } catch (_e) {}
 
             // Wait for username to appear after advancing
             const waitStart = Date.now();
@@ -217,11 +350,102 @@ class GoogleAccount {
             logger.debug('Username still not visible. Trying to fill personal info step first...');
             await this.handlePersonalInfo(page, userData);
 
-            // Try to advance again and wait for username
+            // After filling personal info, look for the "Don't have email" button again
+            // This is crucial - Google shows this button after birthday/gender step
             try {
-                await page.click('button[jsname="LgbsSe"]');
-                await this.delay(this.randomDelay(1500, 3000));
+                // First try specific selectors for the button
+                const noEmailSelectors = [
+                    'button[jsname="Ebwmjd"]',
+                    'button[jsaction*="wufpNd"]',
+                    'button:has-text("Don\'t have an email address or phone number?")',
+                ];
+
+                let foundButton = false;
+                for (const selector of noEmailSelectors) {
+                    try {
+                        const btn = await page.$(selector);
+                        if (btn) {
+                            logger.debug(`Clicking "Don't have email" button after personal info: ${selector}`);
+                            await page.click(selector);
+                            foundButton = true;
+                            break;
+                        }
+                    } catch (_e) {}
+                }
+
+                // Fallback: search by text content
+                if (!foundButton) {
+                    await page.evaluate(() => {
+                        const nodes = [...document.querySelectorAll('a,button,div[role="button"],span[role="button"]')];
+                        const btnOrLink = nodes.find(el => {
+                            const t = (el.innerText || el.textContent || '').toLowerCase().trim();
+                            return t.includes("don't have an email address or phone number");
+                        });
+                        if (btnOrLink) {
+                            console.log('Found "no email" button after personal info:', btnOrLink.textContent);
+                            btnOrLink.click();
+                            return true;
+                        }
+                        return false;
+                    });
+                }
+
+                if (foundButton) {
+                    await this.delay(this.randomDelay(2000, 3500));
+                }
             } catch (_e) {}
+
+            // After clicking "Don't have email", look for "Create own Gmail" radio button
+            try {
+                const createOwnGmailSelectors = [
+                    'input[type="radio"][value="custom"]',
+                    'input[name="usernameRadio"][value="custom"]',
+                    'input[aria-label*="Create your own Gmail" i]',
+                    'input[aria-label*="Create own Gmail" i]',
+                    'input[jsname="YPqjbf"]'
+                ];
+
+                let foundRadio = false;
+                for (const selector of createOwnGmailSelectors) {
+                    try {
+                        const radio = await page.$(selector);
+                        if (radio) {
+                            logger.debug(`Clicking "Create own Gmail" radio button after personal info: ${selector}`);
+                            await page.click(selector);
+                            foundRadio = true;
+                            break;
+                        }
+                    } catch (_e) {}
+                }
+
+                if (foundRadio) {
+                    await this.delay(this.randomDelay(1500, 2500));
+                }
+            } catch (_e) {}
+
+            // Try to advance with Next button
+            const possibleNexts = [
+                '#collectNameNext',
+                '#accountDetailsNext',
+                'button[jsname="LgbsSe"]',
+                'div[role="button"][jsname="LgbsSe"]',
+                'button[type="button"][data-is-primary]',
+                'button[class*="VfPpkd-LgbsSe"]',
+                'div[role="button"][class*="VfPpkd-LgbsSe"]',
+                'button[aria-label="Next"]',
+                'div[role="button"][aria-label="Next"]'
+            ];
+
+            let clickedNext = false;
+            for (const sel of possibleNexts) {
+                const btn = await page.$(sel);
+                if (btn) {
+                    await page.click(sel);
+                    clickedNext = true;
+                    await this.delay(this.randomDelay(1500, 3000));
+                    break;
+                }
+            }
 
             // On some flows, after birthday/gender Google shows suggestions.
             // Click the "Create your own Gmail address" link to reveal the username input.
@@ -264,26 +488,166 @@ class GoogleAccount {
                 logger.debug(`Page H1: ${h1}`);
                 const url = page.url();
                 logger.debug(`Current URL: ${url}`);
+
+                // Capture page title and visible text for debugging
+                const title = await page.title();
+                logger.debug(`Page title: ${title}`);
+
+                const visibleText = await page.evaluate(() => {
+                    return document.body.innerText.substring(0, 500);
+                });
+                logger.debug(`Visible text: ${visibleText}`);
+
+                // Capture all input fields on page for debugging
+                const inputs = await page.evaluate(() => {
+                    return Array.from(document.querySelectorAll('input')).map(input => ({
+                        name: input.name,
+                        type: input.type,
+                        id: input.id,
+                        ariaLabel: input.getAttribute('aria-label'),
+                        placeholder: input.placeholder
+                    }));
+                });
+                logger.debug(`Available input fields: ${JSON.stringify(inputs, null, 2)}`);
+
             } catch (_e) {}
             throw new Error('Username field not found after navigating flow');
         }
 
-        // Fill username (local-part only)
-        const localPart = userData.email.split('@')[0];
-        await this.typeHumanLike(page, usernameSelectorFound, localPart);
+        // Check if this is an email/phone field or username field
+        const isEmailPhoneField = usernameSelectorFound.includes('emailPhone') ||
+                                  usernameSelectorFound.includes('email') ||
+                                  (await page.$eval(usernameSelectorFound, el => {
+                                      const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
+                                      return ariaLabel.includes('email address or phone') ||
+                                             ariaLabel.includes('email address') ||
+                                             ariaLabel.includes('phone number');
+                                  })).catch(() => false);
+
+        if (isEmailPhoneField) {
+            // For email/phone fields, we should try to create a Gmail address instead
+            logger.debug(`Email/phone field detected - attempting to create Gmail address`);
+            
+            // Check if we already clicked "Create own Gmail" earlier in the flow
+            // If not, try to find and click it now
+            const createGmailSelectors = [
+                'input[type="radio"][value="custom"]',
+                'input[name="usernameRadio"][value="custom"]',
+                'input[aria-label*="Create your own Gmail" i]',
+                'input[aria-label*="Create own Gmail" i]',
+                'input[jsname="YPqjbf"]'
+            ];
+
+            let foundGmailOption = false;
+            for (const selector of createGmailSelectors) {
+                try {
+                    const radio = await page.$(selector);
+                    if (radio) {
+                        // Check if it's already selected
+                        const isSelected = await page.$eval(selector, el => el.checked);
+                        if (!isSelected) {
+                            logger.debug(`Clicking "Create own Gmail" radio button: ${selector}`);
+                            await page.click(selector);
+                            await this.delay(this.randomDelay(1000, 2000));
+                        } else {
+                            logger.debug(`"Create own Gmail" radio button already selected: ${selector}`);
+                        }
+                        foundGmailOption = true;
+                        break;
+                    }
+                } catch (_e) {}
+            }
+
+            if (foundGmailOption) {
+                // After clicking "Create own Gmail", look for the username field that should appear
+                const usernameCandidates = [
+                    '#username',
+                    'input[name="Username"]',
+                    'input[name="username"]',
+                    'input[type="email"][name="Username"]',
+                    'input[aria-label*="Choose your username"]',
+                    'input[aria-label*="Choose a Gmail address"]',
+                    'input[placeholder*="username" i]'
+                ];
+
+                let gmailUsernameField = null;
+                for (const sel of usernameCandidates) {
+                    const exists = await page.$(sel);
+                    if (exists) {
+                        gmailUsernameField = sel;
+                        break;
+                    }
+                }
+
+                if (gmailUsernameField) {
+                    // Enter the Gmail address we want to create
+                    const localPart = userData.email.split('@')[0];
+                    logger.debug(`Entering Gmail username: ${localPart}`);
+                    await this.typeHumanLike(page, gmailUsernameField, localPart);
+                } else {
+                    // If no Gmail username field appeared, try entering the email/phone field with our desired Gmail
+                    const localPart = userData.email.split('@')[0];
+                    logger.debug(`No Gmail field found, entering desired Gmail in email/phone field: ${localPart}`);
+                    await this.typeHumanLike(page, usernameSelectorFound, localPart);
+                }
+            } else {
+                // No Gmail creation option found, try entering our desired Gmail address
+                const localPart = userData.email.split('@')[0];
+                logger.debug(`No Gmail option found, entering desired Gmail: ${localPart}`);
+                await this.typeHumanLike(page, usernameSelectorFound, localPart);
+            }
+        } else {
+            // For traditional username fields, enter just the local part
+            const localPart = userData.email.split('@')[0];
+            logger.debug(`Entering username (local part): ${localPart}`);
+            await this.typeHumanLike(page, usernameSelectorFound, localPart);
+        }
         await this.delay(this.randomDelay(400, 900));
 
         // Fill password fields (selectors can vary slightly; check a couple of candidates)
-        const pwdCandidates = ['[name="Passwd"]', 'input[name="Passwd"]', 'input[type="password"][name="Passwd"]'];
-        const confirmCandidates = ['[name="ConfirmPasswd"]', 'input[name="ConfirmPasswd"]', 'input[type="password"][name="ConfirmPasswd"]'];
-
+        // Updated selectors for current Google Material Design
+        // Identify the active password section by DOM context
+        const pwdCandidates = [
+            '[name="Passwd"]',
+            'input[name="Passwd"]',
+            'input[type="password"][name="Passwd"]',
+            'input[type="password"][autocomplete="new-password"]',
+            'input[aria-label*="Create a password"]',
+            'input[aria-label*="Password"]',
+            'input[jscontroller][type="password"]:first-of-type'
+        ];
+        const confirmCandidates = [
+            '[name="ConfirmPasswd"]',
+            'input[name="ConfirmPasswd"]',
+            'input[type="password"][name="ConfirmPasswd"]',
+            'input[type="password"][autocomplete="new-password"]:nth-of-type(2)',
+            'input[aria-label*="Confirm your password"]',
+            'input[aria-label*="Confirm"]',
+            'input[jscontroller][type="password"]:nth-of-type(2)'
+        ];
+        const sectionHandle = await page.$x("//h1|//h2|//label[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'password')]");
+        const container = sectionHandle?.[0] ? await sectionHandle[0].evaluateHandle(el => el.closest('form') || el.closest('section') || document.body) : null;
+        
         let pwdSel = null;
-        for (const sel of pwdCandidates) {
-            if (await page.$(sel)) { pwdSel = sel; break; }
-        }
         let confirmSel = null;
-        for (const sel of confirmCandidates) {
-            if (await page.$(sel)) { confirmSel = sel; break; }
+        
+        if (container) {
+            // Within container, query for input[type='password']
+            const fields = await container.$$('input[type="password"]');
+            if (fields[0]) {
+                pwdSel = fields[0];
+            }
+            if (fields[1]) {
+                confirmSel = fields[1];
+            }
+        } else {
+            // Fallback to the existing aria-label based selectors if scoping fails
+            for (const sel of pwdCandidates) {
+                if (await page.$(sel)) { pwdSel = sel; break; }
+            }
+            for (const sel of confirmCandidates) {
+                if (await page.$(sel)) { confirmSel = sel; break; }
+            }
         }
 
         if (!pwdSel || !confirmSel) {
@@ -302,14 +666,22 @@ class GoogleAccount {
             }
         }
 
-        if (!pwdSel || !confirmSel) {
-            throw new Error('Password fields not found in flow');
+        if (!pwdSel) {
+            throw new Error('Password field not found in flow');
         }
 
-        await this.typeHumanLike(page, pwdSel, userData.password);
-        await this.delay(this.randomDelay(400, 900));
-        await this.typeHumanLike(page, confirmSel, userData.password);
-        await this.delay(this.randomDelay(800, 1500));
+        // Some Google flows only show one password field
+        if (!confirmSel) {
+            logger.debug('Confirm password field not found - single password field flow detected');
+            await this.typeHumanLike(page, pwdSel, userData.password);
+            await this.delay(this.randomDelay(800, 1500));
+        } else {
+            // Standard two-password flow
+            await this.typeHumanLike(page, pwdSel, userData.password);
+            await this.delay(this.randomDelay(400, 900));
+            await this.typeHumanLike(page, confirmSel, userData.password);
+            await this.delay(this.randomDelay(800, 1500));
+        }
 
         // Click next/continue to finalize account details step
         logger.debug('Clicking next button to proceed...');
@@ -381,6 +753,20 @@ class GoogleAccount {
             if (!resolvedPhone) {
                 logger.warn('⚠️  Phone number missing. Provide userData.phoneNumber or set SMS_MANUAL_PHONE for mock/manual testing.');
                 throw new Error('Phone number missing for verification');
+            }
+
+            // Blacklist enforcement (policy)
+            try {
+                const list = (process.env.SMS_BLACKLIST || '+491732114133')
+                    .split(',')
+                    .map(s => s.trim())
+                    .filter(Boolean);
+                if (list.includes(resolvedPhone.trim())) {
+                    logger.warn(`⚠️  Phone number ${resolvedPhone} is blacklisted by policy; skipping verification step.`);
+                    throw new Error('Phone number is blacklisted by policy');
+                }
+            } catch (_e) {
+                // continue
             }
 
             // Fill phone number
@@ -593,10 +979,41 @@ class GoogleAccount {
     async handlePersonalInfo(page, userData) {
         try {
             // Be resilient: Google may show birthday/gender with varying selectors and sometimes before username
-            const monthSelectors = ['#month', 'select#month', 'select[name=\"month\"]', '[aria-label*=\"month\" i]'];
-            const daySelectors   = ['#day', 'input#day', 'input[name=\"day\"]', '[aria-label*=\"day\" i]'];
-            const yearSelectors  = ['#year', 'input#year', 'input[name=\"year\"]', '[aria-label*=\"year\" i]'];
-            const genderSelectors= ['#gender', 'select#gender', 'select[name=\"gender\"]', '[aria-label*=\"gender\" i]'];
+            // Updated selectors for current Google Material Design components
+            const monthSelectors = [
+                '#month',
+                'select#month',
+                'select[name=\"month\"]',
+                '[aria-label*=\"month\" i]',
+                '[role=\"combobox\"][aria-label*=\"month\" i]',
+                'div[role=\"button\"][aria-label*=\"month\" i]',
+                'input[aria-label*=\"Birth month\" i]',
+                'ul[role=\"listbox\"][aria-label*=\"Month\" i]'
+            ];
+            const daySelectors = [
+                '#day',
+                'input#day',
+                'input[name=\"day\"]',
+                '[aria-label*=\"day\" i]',
+                'input[aria-label*=\"Birth day\" i]',
+                'input[type=\"number\"][aria-label*=\"day\" i]'
+            ];
+            const yearSelectors = [
+                '#year',
+                'input#year',
+                'input[name=\"year\"]',
+                '[aria-label*=\"year\" i]',
+                'input[aria-label*=\"Birth year\" i]',
+                'input[type=\"number\"][aria-label*=\"year\" i]'
+            ];
+            const genderSelectors = [
+                '#gender',
+                'select#gender',
+                'select[name=\"gender\"]',
+                '[aria-label*=\"gender\" i]',
+                '[role=\"combobox\"][aria-label*=\"gender\" i]',
+                'div[role=\"button\"][aria-label*=\"gender\" i]'
+            ];
 
             const firstExists = async (sels) => {
                 for (const s of sels) {
@@ -608,10 +1025,6 @@ class GoogleAccount {
             const monthSel = await firstExists(monthSelectors);
             const daySel   = await firstExists(daySelectors);
             const yearSel  = await firstExists(yearSelectors);
-            logger.debug(`Personal info selector match: month=${monthSel || 'none'}, day=${daySel || 'none'}, year=${yearSel || 'none'}`);
-            if (!monthSel && !daySel && !yearSel) {
-                await this.captureDebug(page, 'pi-no-fields');
-            }
             logger.debug(`Personal info selector match: month=${monthSel || 'none'}, day=${daySel || 'none'}, year=${yearSel || 'none'}`);
             if (!monthSel && !daySel && !yearSel) {
                 await this.captureDebug(page, 'pi-no-fields');
@@ -677,60 +1090,6 @@ class GoogleAccount {
                         }
                     } catch (_e) {}
                 };
-                // Helpers for Material UI dropdowns (combobox) and label-based inputs
-                const monthNameFromIndex = (m) => {
-                    const names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-                    const idx = Math.max(1, Math.min(12, parseInt(m || 1))) - 1;
-                    return names[idx];
-                };
-                const genderTextFromCode = (g) => {
-                    const s = String(g || '3');
-                    if (s === '1') return 'Male';
-                    if (s === '2') return 'Female';
-                    return 'Prefer not to say';
-                };
-                const selectComboboxByLabel = async (labelText, optionText) => {
-                    try {
-                        await page.evaluate((lbl, opt) => {
-                            const lower = (x) => (x || '').toLowerCase().trim();
-                            // Find combobox by aria-label containing label text
-                            const cb = document.querySelector(`[role=\"combobox\"][aria-label*=\"${lbl}\"]`) ||
-                                       document.querySelector(`div[role=\"button\"][aria-label*=\"${lbl}\"]`) ||
-                                       [...document.querySelectorAll('[role=\"combobox\"],[role=\"button\"]')].find(el => lower(el.getAttribute('aria-label')).includes(lower(lbl)));
-                            if (cb) cb.click();
-                        }, labelText, optionText);
-                        await this.delay(this.randomDelay(200, 500));
-                        // Click option by visible text
-                        await page.evaluate((opt) => {
-                            const lower = (x) => (x || '').toLowerCase().trim();
-                            const list = document.querySelector('[role=\"listbox\"],ul[role=\"listbox\"],div[role=\"listbox\"]') || document;
-                            const all = [...list.querySelectorAll('[role=\"option\"], li, div')];
-                            const cand = all.find(el => lower(el.innerText || el.textContent).includes(lower(opt)));
-                            if (cand) (cand.closest('[role=\"option\"]') || cand).click();
-                        }, optionText);
-                        await this.delay(this.randomDelay(300, 700));
-                    } catch (_e) {
-                        // Swallow errors; fallback typing may still succeed
-                    }
-                };
-                const typeByAria = async (labelText, value) => {
-                    try {
-                        const handle = await page.$(`input[aria-label*=\"${labelText}\" i]`);
-                        if (handle) {
-                            try { await handle.click({ delay: 30 }); } catch (_e) {}
-                            await this.delay(this.randomDelay(80, 160));
-                            try { await handle.focus(); } catch (_e2) {}
-                            try {
-                                await page.keyboard.down('Control');
-                                await page.keyboard.press('A');
-                                await page.keyboard.up('Control');
-                                await page.keyboard.press('Backspace');
-                            } catch (_e3) {}
-                            await page.keyboard.type(String(value), { delay: 60 });
-                            await this.delay(this.randomDelay(150, 300));
-                        }
-                    } catch (_e) {}
-                };
 
                 const tryFill = async (sel, value, isNumeric = true) => {
                     if (!sel || value === undefined || value === null) return;
@@ -757,9 +1116,15 @@ class GoogleAccount {
                     await this.delay(this.randomDelay(250, 500));
                 };
 
-                await tryFill(monthSel, userData.birthMonth);
-                await tryFill(daySel,   userData.birthDay);
-                await tryFill(yearSel,  userData.birthYear);
+                // Handle month dropdown specially (Material Design dropdown)
+                if (monthSel) {
+                    await this.handleMonthDropdown(page, monthSel, userData.birthMonth);
+                } else {
+                    logger.warn('No month selector found');
+                }
+
+                await tryFill(daySel, userData.birthDay);
+                await tryFill(yearSel, userData.birthYear);
 
                 const genderSel = await firstExists(genderSelectors);
                 if (genderSel) {
@@ -803,6 +1168,112 @@ class GoogleAccount {
             await this.captureDebug(page, 'personal-info-error');
             logger.warn('Personal info handling error:', error?.message || String(error));
             // Continue even if personal info fails
+        }
+    }
+
+    async handleMonthDropdown(page, monthSelector, monthValue) {
+        try {
+            logger.debug('📅 Handling month dropdown with Material Design...');
+
+            // Get month name from number (1-12)
+            const monthNames = [
+                'January', 'February', 'March', 'April', 'May', 'June',
+                'July', 'August', 'September', 'October', 'November', 'December'
+            ];
+
+            const monthIndex = parseInt(monthValue) || 1;
+            const monthName = monthNames[Math.max(1, Math.min(12, monthIndex)) - 1];
+
+            logger.debug(`Selecting month: ${monthName} (${monthValue})`);
+
+            // First try traditional select
+            try {
+                await page.select(monthSelector, String(monthValue));
+                logger.debug('✅ Month selected using traditional select');
+                return;
+            } catch (selectError) {
+                logger.debug('Traditional select failed, trying Material Design approach...');
+            }
+
+            // Check if dropdown is already open (options visible)
+            const optionsAlreadyVisible = await page.$('li[role="option"][data-value]');
+
+            if (!optionsAlreadyVisible) {
+                // Click to open dropdown if not already open
+                await page.click(monthSelector);
+                await this.delay(this.randomDelay(500, 1000));
+            } else {
+                logger.debug('Month dropdown options already visible');
+            }
+
+            // Wait for dropdown options to appear
+            const optionSelectors = [
+                '[role="option"]',
+                '[role="listbox"] [role="option"]',
+                'li[role="option"]',
+                'li[data-value]',
+                'div[data-value]',
+                'ul[role="listbox"] li[role="option"]'
+            ];
+
+            let optionSelected = false;
+
+            for (const optionSelector of optionSelectors) {
+                try {
+                    await page.waitForSelector(optionSelector, { timeout: 2000 });
+
+                    // Try to select by month name
+                    const selected = await page.evaluate((selector, monthName, monthValue) => {
+                        const options = Array.from(document.querySelectorAll(selector));
+
+                        // Try to find by text content (month name)
+                        let target = options.find(el => {
+                            const text = (el.textContent || '').trim().toLowerCase();
+                            return text === monthName.toLowerCase() || text.includes(monthName.toLowerCase());
+                        });
+
+                        // If not found, try by data-value or value attribute
+                        if (!target) {
+                            target = options.find(el => {
+                                const value = el.getAttribute('data-value') || el.getAttribute('value');
+                                return value == monthValue;
+                            });
+                        }
+
+                        // If still not found, try by index (monthValue - 1)
+                        if (!target && options.length >= 12) {
+                            const index = parseInt(monthValue) - 1;
+                            if (index >= 0 && index < options.length) {
+                                target = options[index];
+                            }
+                        }
+
+                        if (target) {
+                            target.click();
+                            return true;
+                        }
+                        return false;
+                    }, optionSelector, monthName, monthValue);
+
+                    if (selected) {
+                        logger.debug(`✅ Month selected using ${optionSelector}`);
+                        optionSelected = true;
+                        await this.delay(this.randomDelay(300, 600));
+                        break;
+                    }
+                } catch (waitError) {
+                    continue;
+                }
+            }
+
+            if (!optionSelected) {
+                logger.warn('❌ Could not select month from dropdown');
+                // Try clicking away to close dropdown
+                await page.click('body');
+            }
+
+        } catch (error) {
+            logger.warn('Month dropdown handling error:', error.message);
         }
     }
 
@@ -879,13 +1350,35 @@ class GoogleAccount {
         }
     }
 
-    async typeHumanLike(page, selector, text) {
-        await page.focus(selector);
-        await this.delay(this.randomDelay(100, 300));
+    async typeHumanLike(page, target, text) {
+        // Ensure text is a string
+        if (typeof text !== 'string') {
+            text = String(text || '');
+        }
+        
+        // Support both CSS selector strings and ElementHandle objects
+        if (typeof target === 'string') {
+            // Existing behavior for CSS selectors
+            await page.focus(target);
+            await this.delay(this.randomDelay(100, 300));
 
-        for (const char of text) {
-            await page.keyboard.type(char);
-            await this.delay(this.randomDelay(50, 200));
+            for (const char of text) {
+                await page.keyboard.type(char);
+                await this.delay(this.randomDelay(50, 200));
+            }
+        } else if (target && typeof target.click === 'function') {
+            // Handle ElementHandle objects
+            await target.click();
+            await this.delay(this.randomDelay(100, 300));
+            await target.focus();
+            await this.delay(this.randomDelay(100, 300));
+
+            for (const char of text) {
+                await page.keyboard.type(char);
+                await this.delay(this.randomDelay(50, 200));
+            }
+        } else {
+            throw new Error('Invalid target type for typeHumanLike. Expected string or ElementHandle.');
         }
     }
 
@@ -896,17 +1389,52 @@ class GoogleAccount {
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
             const safeLabel = String(label).replace(/[^a-z0-9\-_]/gi, '_');
             const base = path.join(dir, `${timestamp}-${safeLabel}`);
+
+            // Enhanced debug capture with comprehensive information
             try {
                 await page.screenshot({ path: `${base}.png`, fullPage: true });
             } catch (e) {
                 logger.warn('Screenshot capture failed:', e.message);
             }
+
             try {
                 const html = await page.content();
                 await fs.writeFile(`${base}.html`, html, 'utf8');
             } catch (e) {
                 logger.warn('HTML capture failed:', e.message);
             }
+
+            // Capture additional debug information
+            try {
+                const debugInfo = {
+                    url: page.url(),
+                    title: await page.title(),
+                    timestamp: new Date().toISOString(),
+                    visibleText: await page.evaluate(() => document.body.innerText.substring(0, 1000)),
+                    inputFields: await page.evaluate(() => {
+                        return Array.from(document.querySelectorAll('input')).map(input => ({
+                            name: input.name,
+                            type: input.type,
+                            id: input.id,
+                            ariaLabel: input.getAttribute('aria-label'),
+                            placeholder: input.placeholder,
+                            visible: input.offsetParent !== null
+                        }));
+                    }),
+                    buttons: await page.evaluate(() => {
+                        return Array.from(document.querySelectorAll('button, [role=\"button\"]')).map(btn => ({
+                            text: btn.innerText || btn.textContent,
+                            ariaLabel: btn.getAttribute('aria-label'),
+                            jsname: btn.getAttribute('jsname'),
+                            visible: btn.offsetParent !== null
+                        }));
+                    })
+                };
+                await fs.writeFile(`${base}-debug.json`, JSON.stringify(debugInfo, null, 2), 'utf8');
+            } catch (e) {
+                logger.warn('Extended debug info capture failed:', e.message);
+            }
+
             logger.info(`🧩 Debug captured: ${base} url=${page.url()}`);
         } catch (e) {
             logger.warn('Debug capture error:', e.message);

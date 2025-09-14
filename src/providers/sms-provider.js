@@ -11,6 +11,7 @@ const readline = require('readline');
 const settings = require('../../config/settings');
 const logger = require('../../utils/logger');
 const axios = require('axios');
+const OnlineSimSmsProvider = require('./onlinesim-provider');
 
 const CODE_REGEX = /\b(\d{4,8})\b/;
 
@@ -63,25 +64,39 @@ class MockSmsProvider {
   }
 
   async _fromFile(timeoutMs) {
-    await fs.ensureDir(path.dirname(this.filePath)).catch(() => {});
+    try {
+      await fs.ensureDir(path.dirname(this.filePath));
+    } catch (dirError) {
+      logger.warn(`SMS[Mock] Failed to create directory: ${dirError.message}`);
+    }
+
     logger.info(`SMS[Mock] Watching file for code: ${this.filePath}`);
 
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       try {
         if (await fs.pathExists(this.filePath)) {
-          const content = await fs.readFile(this.filePath, 'utf8').catch(() => '');
+          const content = await fs.readFile(this.filePath, 'utf8').catch((readError) => {
+            logger.warn(`SMS[Mock] File read error: ${readError.message}`);
+            return '';
+          });
           const code = this._extractCode(content);
           if (code) {
             logger.info('SMS[Mock] Code retrieved from file');
             if (this.clearFileAfterRead) {
-              try { await fs.writeFile(this.filePath, ''); } catch (e) {}
+              try {
+                await fs.writeFile(this.filePath, '');
+                logger.debug('SMS[Mock] File cleared after reading code');
+              } catch (clearError) {
+                logger.warn(`SMS[Mock] Failed to clear file: ${clearError.message}`);
+              }
             }
             return code;
           }
         }
       } catch (e) {
-        logger.warn(`SMS[Mock] File read error: ${e.message}`);
+        logger.warn(`SMS[Mock] File system error: ${e.message}`);
+        // Continue trying in case it's a temporary file system issue
       }
       await this._sleep(this.pollIntervalMs);
     }
@@ -97,6 +112,22 @@ class MockSmsProvider {
 
   _extractCode(text) {
     if (!text) return null;
+
+    // Enhanced regex to handle various SMS code formats
+    const enhancedCodeRegex = /(?:code|verification|otp|pin)[:\s]*([0-9]{4,8})|\b([0-9]{6})\b|\b([0-9]{4})\b|\b([0-9]{5})\b|\b([0-9]{7})\b|\b([0-9]{8})\b/gi;
+
+    const matches = [...String(text).matchAll(enhancedCodeRegex)];
+
+    for (const match of matches) {
+      // Find the first non-undefined capture group
+      for (let i = 1; i < match.length; i++) {
+        if (match[i]) {
+          return match[i];
+        }
+      }
+    }
+
+    // Fallback to original regex
     const m = String(text).match(CODE_REGEX);
     return m ? m[1] : null;
   }
@@ -145,7 +176,8 @@ class TwilioSmsProvider {
   constructor() {
     const tw = (settings.sms && settings.sms.twilio) || {};
     // Prefer explicit env to allow live overrides
-    this.sid = process.env.TWILIO_SUBACCOUNT_SID || process.env.TWILIO_ACCOUNT_SID || tw.subaccountSid || tw.accountSid || '';
+    this.accountSid = process.env.TWILIO_ACCOUNT_SID || tw.accountSid || '';
+    this.subaccountSid = process.env.TWILIO_SUBACCOUNT_SID || tw.subaccountSid || '';
     this.authToken = process.env.TWILIO_AUTH_TOKEN || tw.authToken || '';
     this.inboundNumber = (process.env.TWILIO_INBOUND_NUMBER || tw.inboundNumber || '').trim();
     this.messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID || tw.messagingServiceSid || '';
@@ -153,12 +185,11 @@ class TwilioSmsProvider {
     this.pollTimeoutMs = parseInt(process.env.TWILIO_POLL_TIMEOUT_MS || tw.pollTimeoutMs || ((settings.google?.phoneVerificationTimeout || 300) * 1000), 10);
     this.windowMinutes = parseInt(process.env.TWILIO_INBOUND_SEARCH_WINDOW_MINUTES || tw.inboundSearchWindowMinutes || 15, 10);
 
-    if (!this.sid || !this.authToken) {
-      logger.warn('SMS[Twilio] Missing TWILIO_ACCOUNT_SID/auth token (or subaccount). Set env vars.');
-    }
-    if (!this.inboundNumber) {
-      logger.warn('SMS[Twilio] Missing TWILIO_INBOUND_NUMBER (E.164).');
-    }
+    // Use subaccount SID for API calls if provided, otherwise main account SID
+    this.sid = this.subaccountSid || this.accountSid;
+
+    // Validate credentials
+    this.validateCredentials();
 
     this.baseUrl = `https://api.twilio.com/2010-04-01/Accounts/${this.sid}`;
     this.http = axios.create({
@@ -166,6 +197,80 @@ class TwilioSmsProvider {
       timeout: 20000,
       auth: { username: this.sid, password: this.authToken }
     });
+
+    // Validate configuration on initialization
+    this.initializationPromise = this.validateConfiguration();
+  }
+
+  validateCredentials() {
+    const issues = [];
+
+    if (!this.accountSid) {
+      issues.push('Missing TWILIO_ACCOUNT_SID');
+    } else if (!this.accountSid.startsWith('AC') || this.accountSid.length !== 34) {
+      issues.push('Invalid TWILIO_ACCOUNT_SID format (should start with AC and be 34 characters)');
+    }
+
+    if (this.subaccountSid && (!this.subaccountSid.startsWith('AC') || this.subaccountSid.length !== 34)) {
+      issues.push('Invalid TWILIO_SUBACCOUNT_SID format (should start with AC and be 34 characters)');
+    }
+
+    if (!this.authToken) {
+      issues.push('Missing TWILIO_AUTH_TOKEN');
+    } else if (this.authToken.length !== 32) {
+      issues.push('Invalid TWILIO_AUTH_TOKEN format (should be 32 characters)');
+    }
+
+    if (!this.inboundNumber) {
+      issues.push('Missing TWILIO_INBOUND_NUMBER (E.164 format)');
+    } else if (!this.inboundNumber.match(/^\+[1-9]\d{1,14}$/)) {
+      issues.push('Invalid TWILIO_INBOUND_NUMBER format (should be E.164 format like +1234567890)');
+    }
+
+    if (issues.length > 0) {
+      logger.error('SMS[Twilio] Configuration validation failed:', issues.join(', '));
+      this.credentialsValid = false;
+    } else {
+      this.credentialsValid = true;
+      logger.debug('SMS[Twilio] Credentials validation passed');
+    }
+  }
+
+  async validateConfiguration() {
+    if (!this.credentialsValid) {
+      logger.warn('SMS[Twilio] Skipping API validation due to credential format issues');
+      return false;
+    }
+
+    try {
+      logger.debug('SMS[Twilio] Validating API connectivity...');
+
+      // Test API connectivity with a simple account fetch
+      const response = await this.http.get('.json');
+
+      if (response.data && response.data.sid) {
+        logger.info('SMS[Twilio] API validation successful');
+        return true;
+      } else {
+        throw new Error('Unexpected API response format');
+      }
+    } catch (error) {
+      const status = error.response?.status;
+      const errorData = error.response?.data;
+
+      if (status === 401) {
+        logger.error('SMS[Twilio] Authentication failed - invalid credentials');
+        if (errorData?.message) {
+          logger.error('SMS[Twilio] API Error:', errorData.message);
+        }
+      } else if (status === 403) {
+        logger.error('SMS[Twilio] Forbidden - check account permissions');
+      } else {
+        logger.error('SMS[Twilio] API validation failed:', error.message);
+      }
+
+      return false;
+    }
   }
 
   async sendSms({ to, body }) {
@@ -236,8 +341,14 @@ class TwilioSmsProvider {
   }
 
   async _checkInboxOnce() {
-    if (!this.sid || !this.authToken || !this.inboundNumber) {
-      throw new Error('Invalid Twilio configuration (sid/token/number)');
+    // Ensure initialization completed
+    const isValid = await this.initializationPromise;
+    if (!isValid) {
+      throw new Error('Twilio configuration validation failed - check credentials and API access');
+    }
+
+    if (!this.credentialsValid) {
+      throw new Error('Invalid Twilio credentials format');
     }
 
     const now = Date.now();
@@ -250,8 +361,19 @@ class TwilioSmsProvider {
       const resp = await this.http.get(primaryUrl);
       messages = (resp.data && (resp.data.messages || resp.data.Messages || resp.data.data)) || [];
     } catch (e) {
-      // If the primary call fails, fall back to broad fetch below
-      messages = [];
+      const status = e.response?.status;
+
+      if (status === 401) {
+        throw new Error('Twilio authentication failed - check your account SID and auth token');
+      } else if (status === 404) {
+        throw new Error('Twilio API endpoint not found - check your account SID format');
+      } else if (status === 429) {
+        throw new Error('Twilio rate limit exceeded - please wait before retrying');
+      } else {
+        logger.warn(`SMS[Twilio] Primary query failed (${status}): ${e.message}, trying fallback`);
+        // If the primary call fails, fall back to broad fetch below
+        messages = [];
+      }
     }
 
     // If primary returns nothing, fallback: fetch recent messages without filter and filter client-side
@@ -303,15 +425,52 @@ class TwilioSmsProvider {
  */
 function getSmsProvider() {
   const providerName = (process.env.SMS_PROVIDER || (settings.sms && settings.sms.provider) || 'mock').toLowerCase();
-  switch (providerName) {
-    case 'mock':
-      return new MockSmsProvider();
-    case 'twilio':
-      return new TwilioSmsProvider();
-    default:
-      logger.warn(`SMS provider "${providerName}" is not implemented. Falling back to "mock".`);
-      return new MockSmsProvider();
+  const fallbackChain = process.env.SMS_PROVIDER_FALLBACK_CHAIN?.split(',').map(p => p.trim().toLowerCase()) || ['mock'];
+
+  // Validate credentials on startup if configured
+  const validateOnStartup = (process.env.SMS_CREDENTIAL_VALIDATION_ON_STARTUP || 'true') === 'true';
+
+  const createProvider = (name) => {
+    switch (name) {
+      case 'mock':
+        return new MockSmsProvider();
+      case 'onlinesim':
+        return new OnlineSimSmsProvider();
+      case 'twilio':
+        const twilioProvider = new TwilioSmsProvider();
+        if (validateOnStartup && !twilioProvider.credentialsValid) {
+          logger.warn('SMS[Twilio] Credentials validation failed, falling back to mock provider');
+          return null; // Will trigger fallback
+        }
+        return twilioProvider;
+      default:
+        logger.warn(`SMS provider "${name}" is not implemented.`);
+        return null;
+    }
+  };
+
+  // Try primary provider first
+  const primaryProvider = createProvider(providerName);
+  if (primaryProvider) {
+    logger.info(`SMS provider initialized: ${providerName}`);
+    return primaryProvider;
   }
+
+  // Try fallback chain
+  logger.warn(`Primary SMS provider "${providerName}" failed, trying fallback chain: ${fallbackChain.join(', ')}`);
+  for (const fallbackName of fallbackChain) {
+    if (fallbackName === providerName) continue; // Already tried
+
+    const fallbackProvider = createProvider(fallbackName);
+    if (fallbackProvider) {
+      logger.info(`SMS provider fallback successful: ${fallbackName}`);
+      return fallbackProvider;
+    }
+  }
+
+  // Final fallback to mock
+  logger.warn('All SMS providers failed, using mock provider as final fallback');
+  return new MockSmsProvider();
 }
 
 module.exports = getSmsProvider;

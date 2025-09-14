@@ -119,7 +119,28 @@ function fmtDate(d) {
       process.exit(4);
     }
 
-    const messages = (resp.json && (resp.json.messages || resp.json.Messages || resp.json.data)) || [];
+    let messages = (resp.json && (resp.json.messages || resp.json.Messages || resp.json.data)) || [];
+
+    // Fallback: if empty, fetch recent messages without "To" filter and filter client-side
+    if (!Array.isArray(messages) || messages.length === 0) {
+      const fbUrl =
+        `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(effectiveSid)}` +
+        `/Messages.json?PageSize=${pageSize}`;
+      const resp2 = await httpGetJson(fbUrl, effectiveSid, authToken);
+      if (resp2.status === 200) {
+        const all = (resp2.json && (resp2.json.messages || resp2.json.Messages || resp2.json.data)) || [];
+        if (Array.isArray(all) && all.length > 0) {
+          messages = all.filter((m) => {
+            const to = (m.to || m.To || '').trim();
+            const direction = (m.direction || m.Direction || '').toLowerCase();
+            return to === inboundNumber && direction.includes('inbound');
+          });
+        } else {
+          messages = [];
+        }
+      }
+    }
+
     if (!Array.isArray(messages) || messages.length === 0) {
       console.log('No messages found for this inbound number.');
       process.exit(0);

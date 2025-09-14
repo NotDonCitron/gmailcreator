@@ -51,6 +51,9 @@ class KilocodeAutomation {
             await fs.ensureDir(path.join(__dirname, '../temp/profiles'));
             await fs.ensureDir(path.join(__dirname, '../temp/screenshots'));
 
+            // Enhanced environment validation
+            await this.validateEnvironment();
+
             logger.info('🚀 Kilocode Automation System initialized');
             logger.info(`Mode: ${this.options.mode}`);
             logger.info(`Batch size: ${this.options.batchSize}`);
@@ -67,6 +70,52 @@ class KilocodeAutomation {
         }
     }
 
+    async validateEnvironment() {
+        const issues = [];
+        const warnings = [];
+
+        // Check if proxy is enabled
+        const proxyEnabled = (process.env.PROXY_ENABLED ?? 'true') !== 'false' && !this.options.noProxy;
+
+        // Validate required credentials only when proxy is enabled
+        if (proxyEnabled) {
+            const requiredEnvVars = ['PROXY_HOST', 'PROXY_PORT', 'PROXY_USERNAME', 'PROXY_PASSWORD'];
+            for (const envVar of requiredEnvVars) {
+                if (!process.env[envVar]) {
+                    issues.push(`Missing required environment variable: ${envVar}`);
+                }
+            }
+        }
+
+        // Check optional services
+        const dolphinConfigured = !!(process.env.DOLPHIN_ANTY_TOKEN && process.env.DOLPHIN_ANTY_HOST);
+        const twilioConfigured = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN);
+
+        if (!dolphinConfigured) {
+            warnings.push('Dolphin Anty not configured - will use regular browser launching');
+        } else {
+            // Validate Dolphin Anty configuration
+            if (!process.env.DOLPHIN_ANTY_HOST.startsWith('http')) {
+                warnings.push('DOLPHIN_ANTY_HOST should include protocol (http/https)');
+            }
+        }
+
+        if (!twilioConfigured) {
+            warnings.push('Twilio SMS not configured - will use mock SMS provider');
+        }
+
+        // Log validation results
+        if (issues.length > 0) {
+            throw new Error(`Environment validation failed: ${issues.join('; ')}`);
+        }
+
+        if (warnings.length > 0) {
+            warnings.forEach(warning => logger.warn(`⚠️  ${warning}`));
+        }
+
+        logger.info('✅ Environment validation passed');
+    }
+
     async runSingleRegistration(overrideOpts = {}) {
         const startTime = Date.now();
         const registrationId = `reg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -81,39 +130,75 @@ class KilocodeAutomation {
             this.stats.attempted++;
             logger.info(`🎯 Starting registration ${registrationId} (${this.stats.attempted}/${this.options.batchSize})`);
 
-            // Step 1: Get working proxy
-            logger.info('🌐 Getting working proxy...');
-            proxy = await this.proxyManager.getWorkingProxy();
-            logger.info(`Using proxy session ${proxy.sessionId}: ${proxy.host}:${proxy.port}${proxy.ip ? ` (IP: ${proxy.ip})` : ''}`);
+            // Step 1: Get working proxy with health validation
+            // Check if proxy is enabled
+            const proxyEnabled = (process.env.PROXY_ENABLED ?? 'true') !== 'false' && !opts.noProxy;
+            
+            if (proxyEnabled) {
+                logger.info('🌐 Getting working proxy...');
+                proxy = await this.proxyManager.getWorkingProxy();
+            } else {
+                logger.info('🌐 Proxy disabled, proceeding without proxy...');
+                proxy = null;
+            }
+
+            // Validate proxy health if configured
+            if (proxy && proxy.health && proxy.health.status === 'degraded') {
+                logger.warn(`Proxy ${proxy.sessionId} has degraded health (${proxy.health.lastError || 'unknown issue'})`);
+            }
+
+            if (proxy) {
+                logger.info(`Using proxy session ${proxy.sessionId}: ${proxy.host}:${proxy.port}${proxy.ip ? ` (IP: ${proxy.ip})` : ''}`);
+            } else {
+                logger.info('Proceeding without proxy');
+            }
 
             // Step 2: Generate user data
             logger.info('📊 Generating user data...');
             const userData = await this.dataGenerator.generateUserData();
             logger.debug('Generated user data:', { ...userData, password: '[HIDDEN]' });
 
-            // Step 3: Optionally create Dolphin Anty profile
+            // Step 3: Optionally create Dolphin Anty profile with enhanced fallback
             const antyConfigured = !!(process.env.DOLPHIN_ANTY_TOKEN && process.env.DOLPHIN_ANTY_HOST);
+            const fallbackEnabled = (process.env.DOLPHIN_ANTY_FALLBACK_ENABLED || 'true') === 'true';
+
             if (antyConfigured) {
                 try {
                     logger.info('🐬 Creating Dolphin Anty profile...');
+
+                    // Test connection first if configured
+                    if (process.env.API_COMPATIBILITY_TESTING === 'true') {
+                        await this.dolphinAnty.testConnection();
+                    }
+
                     profileId = await this.dolphinAnty.createProfile({
                         name: `kilocode_${registrationId}`,
                         userData,
-                        proxy: {
+                        proxy: proxy ? {
                             type: proxy.type,
                             host: proxy.host,
                             port: proxy.port,
                             username: proxy.username,
                             password: proxy.password
-                        }
+                        } : null
                     });
                     logger.info(`Profile created: ${profileId}`);
                 } catch (e) {
-                    logger.warn(`Dolphin Anty profile creation failed: ${e.message}. Falling back to regular stealth launch.`);
-                    profileId = null;
+                    logger.error(`Dolphin Anty profile creation failed: ${e.message}`);
+
+                    if (e.message.includes('401')) {
+                        logger.error('Dolphin Anty authentication failed. Check API_VERSION and AUTH_HEADER_TYPE configuration.');
+                    }
+
+                    if (fallbackEnabled) {
+                        logger.warn('Falling back to regular stealth launch due to Dolphin Anty failure.');
+                        profileId = null;
+                    } else {
+                        throw new Error(`Dolphin Anty failure with fallback disabled: ${e.message}`);
+                    }
                 }
             } else {
-                logger.warn('Dolphin Anty not configured. Using regular stealth launch.');
+                logger.debug('Dolphin Anty not configured. Using regular stealth launch.');
             }
 
             // Step 4: Launch stealth browser (Anty or regular)
@@ -181,7 +266,7 @@ class KilocodeAutomation {
                     kilocodeAccount,
                     bonuses,
                     profileId,
-                    proxy: { sessionId: proxy.sessionId, ip: proxy.ip || null },
+                    proxy: proxy ? { sessionId: proxy.sessionId, ip: proxy.ip || null } : null,
                     timestamp: new Date().toISOString()
                 }
             };
@@ -200,12 +285,23 @@ class KilocodeAutomation {
                 await this.captureDebugInfo(browser, registrationId, error);
             }
 
-            const recovery = await errorHandler.handleError(error, registrationId);
+            const errType = errorHandler.classifyError(error);
+            const ctx = errType.toLowerCase();
+            const recovery = await errorHandler.handleError(error, ctx);
+
+            // Implement proper delay consumption as returned by error handler
+            if (recovery.delay && recovery.delay > 0) {
+                logger.info(`⏳ Error handler recommends ${recovery.delay / 1000}s delay before retry`);
+                await this.delay(recovery.delay);
+            }
 
             return {
                 status: 'failed',
                 error: error.message,
+                errorType: recovery.errorType || 'unknown',
+                recoveryStrategy: recovery.strategy || 'none',
                 shouldRetry: recovery.shouldRetry,
+                delayApplied: recovery.delay || 0,
                 timestamp: new Date().toISOString()
             };
 
@@ -424,7 +520,8 @@ async function main() {
         .option('--headless <boolean>', 'Run browser in headless mode', 'true')
         .option('-d, --debug', 'Enable debug mode', false)
         .option('--dry-run', 'Perform dry run without actual registration', false)
-        .option('--use-dolphin', 'Use Dolphin Anty if configured (optional)', false);
+        .option('--use-dolphin', 'Use Dolphin Anty if configured (optional)', false)
+        .option('--no-proxy', 'Disable proxy usage', false);
 
     program.parse();
     const options = program.opts();
@@ -439,7 +536,10 @@ async function main() {
     console.log(chalk.yellow('============================\n'));
 
     // Validate environment
-    const baseRequiredVars = ['PROXY_HOST', 'PROXY_PORT', 'PROXY_USERNAME', 'PROXY_PASSWORD'];
+    // Check if proxy is enabled
+    const proxyEnabled = (process.env.PROXY_ENABLED ?? 'true') !== 'false' && !options.noProxy;
+    
+    const baseRequiredVars = proxyEnabled ? ['PROXY_HOST', 'PROXY_PORT', 'PROXY_USERNAME', 'PROXY_PASSWORD'] : [];
     const missingBase = baseRequiredVars.filter(envVar => !process.env[envVar]);
 
     const requireAntyHost = options.useDolphin || !!process.env.DOLPHIN_ANTY_TOKEN;
@@ -450,7 +550,7 @@ async function main() {
 
     if (missingEnvVars.length > 0) {
         console.error(chalk.red(`❌ Missing required environment variables: ${missingEnvVars.join(', ')}`));
-        console.error(chalk.yellow('Proxy variables are always required. Dolphin Anty host is required only when --use-dolphin is set or when DOLPHIN_ANTY_TOKEN is provided.'));
+        console.error(chalk.yellow('Proxy variables are required unless --no-proxy is set or PROXY_ENABLED=false. Dolphin Anty host is required only when --use-dolphin is set or when DOLPHIN_ANTY_TOKEN is provided.'));
         process.exit(1);
     }
 

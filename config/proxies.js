@@ -1,14 +1,27 @@
 const logger = require('../utils/logger');
 
 class ProxyManager {
-    constructor() {
-        // Proxy configuration from environment variables
+    constructor(config = {}) {
+        // Proxy configuration from environment variables or provided config
+        const proxyPort = config.port || process.env.PROXY_PORT;
+        let parsedPort = parseInt(proxyPort, 10);
+        
+        // Validate port
+        if (isNaN(parsedPort) || parsedPort === undefined) {
+            if (process.env.NODE_ENV !== 'production') {
+                logger.warn('Invalid or missing proxy port, using default port 8080');
+                parsedPort = 8080;
+            } else {
+                throw new Error('Invalid or missing proxy port configuration');
+            }
+        }
+
         this.proxyConfig = {
-            host: process.env.PROXY_HOST,
-            port: parseInt(process.env.PROXY_PORT),
-            username: process.env.PROXY_USERNAME,
-            password: process.env.PROXY_PASSWORD,
-            type: process.env.PROXY_TYPE || 'http'
+            host: config.host || process.env.PROXY_HOST,
+            port: parsedPort,
+            username: config.username || process.env.PROXY_USERNAME,
+            password: config.password || process.env.PROXY_PASSWORD,
+            type: config.type || process.env.PROXY_TYPE || 'http'
         };
 
         this.currentSessionIndex = 0;
@@ -27,6 +40,18 @@ class ProxyManager {
         logger.debug('Proxy host:', `${this.proxyConfig.host}:${this.proxyConfig.port}`);
     }
 
+    // Async factory method for runtime validation
+    static async create(config = {}) {
+        const instance = new ProxyManager(config);
+        
+        // Validate port at runtime
+        if (isNaN(instance.proxyConfig.port) || instance.proxyConfig.port <= 0 || instance.proxyConfig.port > 65535) {
+            throw new Error(`Invalid proxy port: ${instance.proxyConfig.port}. Port must be a number between 1 and 65535.`);
+        }
+        
+        return instance;
+    }
+
     getProxyString(sessionId = null) {
         const { host, port, username, password, type } = this.proxyConfig;
 
@@ -37,16 +62,22 @@ class ProxyManager {
             finalUsername = `${username}-${this.sessionPrefix}_${sessionId}`;
         }
 
-        const proxyString = `${type}://${finalUsername}:${password}@${host}:${port}`;
+        // Use URL class to build proxy string with proper encoding
+        const proxyUrl = new URL(`${type}://${host}:${port}`);
+        if (finalUsername && password) {
+            proxyUrl.username = encodeURIComponent(finalUsername);
+            proxyUrl.password = encodeURIComponent(password);
+        }
 
         logger.debug(`Generated proxy string for session ${sessionId || 'default'}`);
-        return proxyString;
+        return proxyUrl.toString();
     }
 
     getNextProxy() {
+        // Get current session ID before incrementing to start from 0
+        const sessionId = this.currentSessionIndex;
         // Rotate through sessions
         this.currentSessionIndex = (this.currentSessionIndex + 1) % this.maxSessions;
-        const sessionId = this.currentSessionIndex;
 
         return {
             proxyString: this.getProxyString(sessionId),
@@ -200,15 +231,14 @@ class ProxyManager {
 
     getProxyConfigForPuppeteer(sessionId = null) {
         const proxyString = this.getProxyString(sessionId);
-        const [protocol, rest] = proxyString.split('://');
-        const [auth, hostPort] = rest.split('@');
-        const [username, password] = auth.split(':');
-        const [host, port] = hostPort.split(':');
-
+        
+        // Use URL class to parse proxy string safely
+        const proxyUrl = new URL(proxyString);
+        
         return {
-            server: `${protocol}://${host}:${port}`,
-            username: username,
-            password: password
+            server: `${proxyUrl.protocol}//${proxyUrl.hostname}:${proxyUrl.port}`,
+            username: decodeURIComponent(proxyUrl.username),
+            password: decodeURIComponent(proxyUrl.password)
         };
     }
 

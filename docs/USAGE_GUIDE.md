@@ -171,6 +171,34 @@ SCREENSHOT_ON_ERROR=true           # Screenshots on failure
 SAVE_HTML_ON_ERROR=false           # Save page HTML on error
 ```
 
+### SMS Provider Policy (No-Twilio)
+
+- Twilio is disabled by policy for OTP/verification flows. Do not use Twilio (VoIP/virtual numbers) for Google OTP.
+- Allowed providers:
+  - mock: for manual/dry testing (ENV/file/prompt input).
+  - onlinesim: placeholder name; not implemented in this build, will fall back to mock with a warning.
+- Blacklist: own/personal numbers and any explicitly disallowed MSISDNs must not be used. Configure via:
+  - .env → SMS_BLACKLIST=+491732114133
+  - You may comma-separate multiple numbers.
+- Runtime normalization blocks Twilio even if SMS_PROVIDER=twilio is set; it is coerced to mock internally.
+- Files impacted:
+  - Provider factory and normalization: [src.providers.sms-provider.getSmsProvider()](src/providers/sms-provider.js:304)
+  - Settings (provider normalization and blacklist): [config.settings.sms](config/settings.js:150)
+  - Google phone step blacklist enforcement: [src.google-account.handlePhoneVerification()](src/google-account.js:374)
+
+Usage for manual code entry
+- File mode (recommended for automation):
+  - Set SMS_PROVIDER=mock and SMS_CODE_INPUT_MODE=file in .env
+  - Write OTP digits to ./temp/sms_code.txt when prompted; provider will auto-detect and clear.
+- Prompt mode (interactive):
+  - Set SMS_CODE_INPUT_MODE=prompt, paste digits at the terminal prompt.
+- ENV mode (one-off invocation):
+  - node -e "process.env.SMS_CODE='123456'; process.env.SMS_CODE_INPUT_MODE='env'; require('./scripts/test-twilio.js')"
+
+Security note
+- Do NOT commit real phone numbers, Twilio credentials, or OTPs to source control.
+- Avoid using personal numbers; the project enforces blacklisting for known personal MSISDNs by default.
+
 ### Runtime Configuration
 
 Override settings at runtime:

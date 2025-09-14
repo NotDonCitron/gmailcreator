@@ -65,6 +65,26 @@ class ErrorHandler {
             'restart_browser'
         ]);
 
+        // New error classifications for enhanced handling
+        this.recoveryStrategies.set('GOOGLE_UI_CHANGE_ERROR', [
+            'update_selectors',
+            'capture_debug_state',
+            'retry_with_delay',
+            'fallback_method'
+        ]);
+
+        this.recoveryStrategies.set('SMS_PROVIDER_ERROR', [
+            'validate_credentials',
+            'fallback_provider',
+            'retry_with_delay'
+        ]);
+
+        this.recoveryStrategies.set('API_VERSION_ERROR', [
+            'detect_api_version',
+            'fallback_auth_method',
+            'retry_with_delay'
+        ]);
+
         this.recoveryStrategies.set('GENERIC_ERROR', [
             'retry',
             'wait_longer',
@@ -76,10 +96,16 @@ class ErrorHandler {
         const errorType = this.classifyError(error);
         const errorKey = `${errorType}_${context || 'global'}`;
 
-        // Track error occurrence
+        // Track error occurrence and patterns
         this.trackError(errorKey, error);
+        this.analyzeErrorPattern(errorKey, error);
 
         logger.error(`🚨 Handling ${errorType} error${context ? ` in ${context}` : ''}:`, error);
+
+        // Check if this is a systematic failure requiring immediate attention
+        if (this.isSystematicFailure(errorType)) {
+            logger.warn(`⚠️  Systematic ${errorType} failure detected - implementing enhanced recovery`);
+        }
 
         // Get recovery strategy
         const strategies = this.recoveryStrategies.get(errorType) ||
@@ -88,15 +114,27 @@ class ErrorHandler {
         // Execute recovery strategies
         const recoveryResult = await this.executeRecoveryStrategy(strategies, error, context);
 
-        // Log recovery attempt
+        // Ensure delay is enforced if configured
+        const delayEnforcement = settings.errorHandling.delayEnforcement;
+        if (delayEnforcement && recoveryResult.delay > 0) {
+            logger.debug(`🛡️  Error delay enforcement enabled - ${recoveryResult.delay}ms delay will be applied`);
+        }
+
+        // Log recovery attempt with detailed information
         logger.info(`🔧 Recovery strategy for ${errorType}: ${recoveryResult.strategy} - ${recoveryResult.success ? 'SUCCESS' : 'FAILED'}`);
+        if (recoveryResult.delay > 0) {
+            logger.info(`⏰ Recommended delay: ${recoveryResult.delay / 1000}s`);
+        }
 
         return {
             errorType,
-            shouldRetry: recoveryResult.shouldRetry,
-            recoveryStrategy: recoveryResult.strategy,
+            shouldRetry: recoveryResult.shouldRetry && this.isRetryableError(error),
+            strategy: recoveryResult.strategy,
             recoverySuccess: recoveryResult.success,
-            delay: recoveryResult.delay || 0
+            delay: recoveryResult.delay || 0,
+            requiresDebugCapture: recoveryResult.requiresDebugCapture || false,
+            requiresCredentialCheck: recoveryResult.requiresCredentialCheck || false,
+            requiresApiVersionCheck: recoveryResult.requiresApiVersionCheck || false
         };
     }
 
@@ -123,10 +161,8 @@ class ErrorHandler {
         }
 
         // Google OAuth errors
-        if (errorText.includes('oauth') ||
-            errorText.includes('google') ||
-            errorText.includes('accounts.google.com') ||
-            errorText.includes('authentication failed')) {
+        if ((errorText.includes('oauth') || errorText.includes('accounts.google.com')) &&
+            (errorText.includes('signin') || errorText.includes('consent') || errorText.includes('authenticate'))) {
             return 'GOOGLE_OAUTH_ERROR';
         }
 
@@ -168,6 +204,34 @@ class ErrorHandler {
             return 'DOLPHIN_ANTY_ERROR';
         }
 
+        // Google UI change errors (selector not found)
+        if (errorText.includes('selector') && errorText.includes('not found') ||
+            errorText.includes('username field not found') ||
+            errorText.includes('password field') && errorText.includes('not found') ||
+            errorText.includes('element not found') && errorText.includes('google') ||
+            errorText.includes('no such element') ||
+            errorText.includes('waiting for selector')) {
+            return 'GOOGLE_UI_CHANGE_ERROR';
+        }
+
+        // SMS provider errors
+        if (errorText.includes('sms') && (errorText.includes('authentication') || errorText.includes('credential')) ||
+            errorText.includes('twilio') && errorText.includes('401') ||
+            errorText.includes('sms provider') && errorText.includes('fail') ||
+            errorText.includes('invalid twilio')) {
+            return 'SMS_PROVIDER_ERROR';
+        }
+
+        // API version errors
+        if (errorText.includes('api') && (errorText.includes('version') || errorText.includes('endpoint')) ||
+            errorText.includes('401') && errorText.includes('dolphin') ||
+            errorText.includes('404') && errorText.includes('/v1.0/') ||
+            errorText.includes('404') && errorText.includes('/v2/') ||
+            errorText.includes('authorization') && errorText.includes('bearer') ||
+            errorText.includes('x-auth-token')) {
+            return 'API_VERSION_ERROR';
+        }
+
         return 'GENERIC_ERROR';
     }
 
@@ -201,13 +265,29 @@ class ErrorHandler {
             }
         }
 
-        // All strategies failed
+        // All strategies failed - implement final fallback
+        const finalDelay = this.calculateProgressiveDelay(context);
+        logger.warn(`⚠️  All recovery strategies failed. Final fallback delay: ${finalDelay / 1000}s`);
+
         return {
-            strategy: 'all_failed',
+            strategy: 'all_failed_final_retry',
             success: false,
-            shouldRetry: false,
-            delay: 0
+            shouldRetry: this.shouldAttemptFinalRetry(error, context),
+            delay: finalDelay
         };
+    }
+
+    shouldAttemptFinalRetry(error, context) {
+        // Only retry if it's a retryable error and we haven't exceeded global limits
+        if (!this.isRetryableError(error)) {
+            return false;
+        }
+
+        const errorKey = context || 'global';
+        const errorInfo = this.errorCounts.get(errorKey);
+        const maxRetries = 5; // Global max retries per error context
+
+        return !errorInfo || errorInfo.count < maxRetries;
     }
 
     async applyStrategy(strategy, error, context) {
@@ -304,6 +384,76 @@ class ErrorHandler {
                     delay: 10000
                 };
 
+            // New recovery strategies for enhanced error handling
+            case 'update_selectors':
+                logger.info('🔄 Google selector update recommended - capturing current page state');
+                return {
+                    success: true,
+                    shouldRetry: true,
+                    delay: 15000,
+                    requiresDebugCapture: true
+                };
+
+            case 'capture_debug_state':
+                logger.info('📸 Capturing debug state for UI analysis');
+                return {
+                    success: true,
+                    shouldRetry: true,
+                    delay: 5000,
+                    requiresDebugCapture: true
+                };
+
+            case 'retry_with_delay':
+                const progressiveDelay = this.calculateProgressiveDelay(context);
+                logger.info(`⏰ Progressive retry delay: ${progressiveDelay / 1000}s`);
+                return {
+                    success: true,
+                    shouldRetry: true,
+                    delay: progressiveDelay
+                };
+
+            case 'fallback_method':
+                logger.info('🔄 Fallback to alternative method recommended');
+                return {
+                    success: true,
+                    shouldRetry: true,
+                    delay: 8000
+                };
+
+            case 'validate_credentials':
+                logger.info('🔐 Credential validation recommended');
+                return {
+                    success: true,
+                    shouldRetry: true,
+                    delay: 5000,
+                    requiresCredentialCheck: true
+                };
+
+            case 'fallback_provider':
+                logger.info('🔄 Provider fallback recommended');
+                return {
+                    success: true,
+                    shouldRetry: true,
+                    delay: 3000
+                };
+
+            case 'detect_api_version':
+                logger.info('🔍 API version detection recommended');
+                return {
+                    success: true,
+                    shouldRetry: true,
+                    delay: 5000,
+                    requiresApiVersionCheck: true
+                };
+
+            case 'fallback_auth_method':
+                logger.info('🔐 Authentication method fallback recommended');
+                return {
+                    success: true,
+                    shouldRetry: true,
+                    delay: 3000
+                };
+
             default:
                 logger.warn(`Unknown recovery strategy: ${strategy}`);
                 return { success: false };
@@ -393,8 +543,77 @@ class ErrorHandler {
         if (context?.includes('google')) contextMultiplier = 1.5;
         if (context?.includes('captcha')) contextMultiplier = 2;
         if (context?.includes('kilocode')) contextMultiplier = 1.2;
+        if (context?.includes('sms')) contextMultiplier = 1.3;
+        if (context?.includes('dolphin')) contextMultiplier = 1.4;
 
         return Math.min(baseDelay * contextMultiplier + jitter, 120000); // Max 2 minutes
+    }
+
+    calculateProgressiveDelay(context = null) {
+        const errorKey = context || 'global';
+        const errorInfo = this.errorCounts.get(errorKey);
+        const failureCount = errorInfo ? errorInfo.count : 0;
+
+        // Progressive delay: 5s, 15s, 30s, 60s, 120s
+        const delays = [5000, 15000, 30000, 60000, 120000];
+        const delayIndex = Math.min(failureCount - 1, delays.length - 1);
+        const baseDelay = delays[delayIndex] || 5000;
+
+        // Add jitter
+        const jitter = Math.random() * 3000;
+        return baseDelay + jitter;
+    }
+
+    analyzeErrorPattern(errorKey, error) {
+        const errorInfo = this.errorCounts.get(errorKey);
+        if (!errorInfo) return;
+
+        // Check for Google-specific failure patterns
+        if (errorKey.includes('GOOGLE_UI_CHANGE')) {
+            const maxGoogleFailures = parseInt(process.env.MAX_CONSECUTIVE_GOOGLE_FAILURES) || 3;
+            if (errorInfo.count >= maxGoogleFailures) {
+                logger.error(`🚨 Maximum consecutive Google failures (${maxGoogleFailures}) reached. UI may have changed.`);
+                this.triggerGoogleUIAlert(errorKey, errorInfo);
+            }
+        }
+
+        // Track success rate per recovery strategy
+        this.updateRecoverySuccessRate(errorKey, error);
+    }
+
+    isSystematicFailure(errorType) {
+        const systematicThreshold = 5; // 5 errors of same type in short period
+        const timeWindow = 10 * 60 * 1000; // 10 minutes
+
+        const recentErrors = Array.from(this.errorCounts.entries())
+            .filter(([key, info]) => {
+                const [type] = key.split('_');
+                return type === errorType &&
+                       info.lastOccurrence > (Date.now() - timeWindow);
+            })
+            .reduce((sum, [, info]) => sum + info.count, 0);
+
+        return recentErrors >= systematicThreshold;
+    }
+
+    triggerGoogleUIAlert(errorKey, errorInfo) {
+        const alert = {
+            type: 'GOOGLE_UI_CHANGE_ALERT',
+            errorKey,
+            consecutiveFailures: errorInfo.count,
+            duration: Date.now() - errorInfo.firstOccurrence,
+            recommendation: 'Update Google signup selectors or run diagnostic script',
+            timestamp: new Date().toISOString()
+        };
+
+        logger.error('🚨 GOOGLE UI CHANGE ALERT', alert);
+        this.sendAlert(alert);
+    }
+
+    updateRecoverySuccessRate(errorKey, error) {
+        // This would track which recovery strategies are most effective
+        // Implementation would require storing strategy success/failure rates
+        logger.debug(`Updating recovery success rate tracking for ${errorKey}`);
     }
 
     getErrorStats() {
@@ -463,11 +682,31 @@ class ErrorHandler {
             'permission denied',
             'unauthorized',
             'forbidden',
-            'payment required'
+            'payment required',
+            'account disabled',
+            'permanently blocked',
+            'invalid api key',
+            'subscription expired'
         ];
 
         const message = error.message?.toLowerCase() || '';
-        return !nonRetryablePatterns.some(pattern => message.includes(pattern));
+
+        // Check for non-retryable patterns
+        if (nonRetryablePatterns.some(pattern => message.includes(pattern))) {
+            return false;
+        }
+
+        // Special handling for Google UI change errors - always retryable
+        if (message.includes('selector') && message.includes('not found')) {
+            return true;
+        }
+
+        // SMS provider errors are retryable unless credential-related
+        if (message.includes('sms') && !message.includes('invalid')) {
+            return true;
+        }
+
+        return true; // Default to retryable
     }
 
     getRecoveryDelay() {

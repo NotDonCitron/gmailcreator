@@ -11,14 +11,20 @@ class DolphinAnty {
             logger.warn('⚠️  DOLPHIN_ANTY_TOKEN not set. Some features may not work properly.');
         }
 
+        // Support for different API versions and auth header formats
+        this.apiVersion = process.env.DOLPHIN_ANTY_API_VERSION || 'auto';
+        this.authHeaderType = process.env.DOLPHIN_ANTY_AUTH_HEADER_TYPE || 'auto';
+
         this.client = axios.create({
             baseURL: this.host,
             timeout: 30000,
             headers: {
-                'Authorization': `Bearer ${this.token}`,
                 'Content-Type': 'application/json'
             }
         });
+
+        // Set authentication header based on configuration or auto-detection
+        this.setAuthHeader();
 
         // Add request/response interceptors for logging
         this.client.interceptors.request.use(
@@ -49,15 +55,92 @@ class DolphinAnty {
         );
     }
 
+    setAuthHeader() {
+        if (!this.token) return;
+
+        const common = this.client.defaults.headers.common || (this.client.defaults.headers.common = {});
+
+        if (this.authHeaderType === 'bearer') {
+            common['Authorization'] = `Bearer ${this.token}`;
+        } else if (this.authHeaderType === 'x-auth-token') {
+            common['X-Auth-Token'] = this.token;
+        } else {
+            // Auto mode - start with newer X-Auth-Token format
+            common['X-Auth-Token'] = this.token; // auto default
+        }
+    }
+
     async testConnection() {
         try {
             logger.debug('Testing Dolphin Anty connection...');
-            const response = await this.client.get('/v1.0/browser_profiles');
-            logger.info('✅ Dolphin Anty connection successful');
-            return true;
+
+            // Try current configuration first
+            let response = await this.attemptConnection();
+
+            if (response) {
+                logger.info('✅ Dolphin Anty connection successful');
+                return {
+                    success: true,
+                    apiVersion: this.detectedApiVersion,
+                    authHeaderType: this.detectedAuthHeaderType
+                };
+            }
+
+            throw new Error('All connection attempts failed');
+
         } catch (error) {
             logger.error('❌ Failed to connect to Dolphin Anty:', error.message);
             throw new Error(`Dolphin Anty connection failed: ${error.message}`);
+        }
+    }
+
+    async attemptConnection() {
+        // If auto mode, try different combinations
+        if (this.authHeaderType === 'auto' || this.apiVersion === 'auto') {
+            const authTypes = ['x-auth-token', 'bearer'];
+            const apiVersions = ['/v1.0/', '/v2/'];
+
+            for (const authType of authTypes) {
+                for (const apiVer of apiVersions) {
+                    try {
+                        // Update headers for this attempt
+                        const headers = { 'Content-Type': 'application/json' };
+                        if (authType === 'bearer') {
+                            headers['Authorization'] = `Bearer ${this.token}`;
+                        } else {
+                            headers['X-Auth-Token'] = this.token;
+                        }
+
+                        const testClient = axios.create({
+                            baseURL: this.host,
+                            timeout: 10000,
+                            headers
+                        });
+
+                        const endpoint = apiVer + 'browser_profiles';
+                        const response = await testClient.get(endpoint);
+
+                        // Success! Update configuration
+                        this.detectedApiVersion = apiVer;
+                        this.detectedAuthHeaderType = authType;
+                        const common = this.client.defaults.headers.common || (this.client.defaults.headers.common = {});
+                        Object.assign(common, headers);
+
+                        logger.info(`✅ Connection successful with API version ${apiVer} and auth type ${authType}`);
+                        return response;
+
+                    } catch (error) {
+                        logger.debug(`Failed attempt: ${authType} + ${apiVer} - ${error.message}`);
+                        continue;
+                    }
+                }
+            }
+
+            return null;
+        } else {
+            // Use configured settings
+            const endpoint = this.apiVersion === 'v2' ? '/v2/browser_profiles' : '/v1.0/browser_profiles';
+            return await this.client.get(endpoint);
         }
     }
 
@@ -65,6 +148,12 @@ class DolphinAnty {
         const { name, userData, proxy } = options;
 
         try {
+            // Pre-flight validation
+            const connectionTest = await this.testConnection();
+            if (!connectionTest.success) {
+                throw new Error('API connectivity test failed before profile creation');
+            }
+
             logger.debug(`Creating Dolphin Anty profile: ${name}`);
 
             // Generate random fingerprint data
@@ -122,7 +211,11 @@ class DolphinAnty {
                 }
             };
 
-            const response = await this.client.post('/v1.0/browser_profiles', profileData);
+            // Use detected or configured API version
+            const base = this.detectedApiVersion || (this.apiVersion === 'v2' ? '/v2/' : '/v1.0/');
+            const apiEndpoint = `${base}browser_profiles`;
+
+            const response = await this.client.post(apiEndpoint, profileData);
             const profileId = response.data.browserProfileId || response.data.id;
 
             if (!profileId) {
@@ -136,9 +229,42 @@ class DolphinAnty {
             logger.error('❌ Failed to create Dolphin Anty profile:', error.message);
 
             if (error.response?.status === 401) {
-                throw new Error('Dolphin Anty authentication failed. Check your API token.');
+                // Try alternative authentication method
+                if (this.authHeaderType === 'auto') {
+                    logger.debug('401 error - attempting authentication fallback');
+                    try {
+                        const fallbackAuthType = this.detectedAuthHeaderType === 'bearer' ? 'x-auth-token' : 'bearer';
+                        const headers = { 'Content-Type': 'application/json' };
+
+                        if (fallbackAuthType === 'bearer') {
+                            headers['Authorization'] = `Bearer ${this.token}`;
+                        } else {
+                            headers['X-Auth-Token'] = this.token;
+                        }
+
+                        // Use safe header merging to avoid overwriting defaults
+                        const common = this.client.defaults.headers.common || (this.client.defaults.headers.common = {});
+                        Object.assign(common, headers);
+                        logger.debug(`Retrying with ${fallbackAuthType} authentication`);
+
+                        // Retry the request
+                        const base = this.detectedApiVersion || (this.apiVersion === 'v2' ? '/v2/' : '/v1.0/');
+                        const apiEndpoint = `${base}browser_profiles`;
+                        const retryResponse = await this.client.post(apiEndpoint, profileData);
+                        const retryProfileId = retryResponse.data.browserProfileId || retryResponse.data.id;
+
+                        logger.info(`✅ Profile created successfully with fallback auth: ${retryProfileId}`);
+                        return retryProfileId;
+
+                    } catch (fallbackError) {
+                        logger.error('Authentication fallback also failed:', fallbackError.message);
+                    }
+                }
+                throw new Error('Dolphin Anty authentication failed. Check your API token and try updating DOLPHIN_ANTY_AUTH_HEADER_TYPE.');
             } else if (error.response?.status === 429) {
                 throw new Error('Rate limited by Dolphin Anty. Please wait before retrying.');
+            } else if (error.response?.status === 404 && this.apiVersion === 'auto') {
+                throw new Error('API endpoint not found. The Dolphin Anty version may have changed. Try setting DOLPHIN_ANTY_API_VERSION.');
             } else if (error.response?.data?.message) {
                 throw new Error(`Dolphin Anty API error: ${error.response.data.message}`);
             }
@@ -151,7 +277,10 @@ class DolphinAnty {
         try {
             logger.debug(`Updating profile ${profileId}`);
 
-            const response = await this.client.patch(`/v1.0/browser_profiles/${profileId}`, updates);
+            const base = this.detectedApiVersion || (this.apiVersion === 'v2' ? '/v2/' : '/v1.0/');
+            const apiEndpoint = `${base}browser_profiles/${profileId}`;
+
+            const response = await this.client.patch(apiEndpoint, updates);
 
             logger.debug(`Profile ${profileId} updated successfully`);
             return response.data;
@@ -166,7 +295,10 @@ class DolphinAnty {
         try {
             logger.debug(`Starting profile ${profileId}...`);
 
-            const response = await this.client.get(`/v1.0/browser_profiles/${profileId}/start`);
+            const base = this.detectedApiVersion || (this.apiVersion === 'v2' ? '/v2/' : '/v1.0/');
+            const apiEndpoint = `${base}browser_profiles/${profileId}/start`;
+
+            const response = await this.client.get(apiEndpoint);
 
             if (!response.data || !response.data.automation) {
                 throw new Error('Profile started but no automation endpoint returned');
@@ -195,7 +327,10 @@ class DolphinAnty {
         try {
             logger.debug(`Stopping profile ${profileId}...`);
 
-            await this.client.get(`/v1.0/browser_profiles/${profileId}/stop`);
+            const base = this.detectedApiVersion || (this.apiVersion === 'v2' ? '/v2/' : '/v1.0/');
+            const apiEndpoint = `${base}browser_profiles/${profileId}/stop`;
+
+            await this.client.get(apiEndpoint);
 
             logger.debug(`✅ Profile ${profileId} stopped successfully`);
 
@@ -216,7 +351,10 @@ class DolphinAnty {
             await this.delay(1000);
 
             // Delete the profile
-            await this.client.delete(`/v1.0/browser_profiles/${profileId}`);
+            const base = this.detectedApiVersion || (this.apiVersion === 'v2' ? '/v2/' : '/v1.0/');
+            const apiEndpoint = `${base}browser_profiles/${profileId}`;
+
+            await this.client.delete(apiEndpoint);
 
             logger.debug(`✅ Profile ${profileId} deleted successfully`);
 
@@ -228,7 +366,10 @@ class DolphinAnty {
 
     async listProfiles() {
         try {
-            const response = await this.client.get('/v1.0/browser_profiles');
+            const base = this.detectedApiVersion || (this.apiVersion === 'v2' ? '/v2/' : '/v1.0/');
+            const apiEndpoint = `${base}browser_profiles`;
+
+            const response = await this.client.get(apiEndpoint);
             return response.data.data || response.data || [];
         } catch (error) {
             logger.error('Failed to list profiles:', error.message);

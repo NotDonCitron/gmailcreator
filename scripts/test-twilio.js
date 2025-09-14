@@ -6,9 +6,14 @@ const getSmsProvider = require('../src/providers/sms-provider');
 
 (async () => {
   try {
-    // Force Twilio unless explicitly set otherwise
+    // Twilio provider disabled by policy; skip this test unless explicitly re-enabled
+    if (process.env.ENABLE_TWILIO !== 'true') {
+      console.log(chalk.yellow('⏭️  Twilio provider is disabled by policy. Skipping Twilio test.'));
+      process.exit(0);
+    }
+    // If explicitly enabled, still avoid forcing provider and respect factory policy
     if (!process.env.SMS_PROVIDER) {
-      process.env.SMS_PROVIDER = 'twilio';
+      process.env.SMS_PROVIDER = 'mock';
     }
 
     console.log(chalk.cyan('🧪 Testing Twilio SMS Provider (polling mode)'));

@@ -71,7 +71,9 @@ module.exports = {
 
     // Google account creation settings
     google: {
-        signupUrl: 'https://accounts.google.com/signup/v2/webcreateaccount',
+        signupUrl: process.env.GOOGLE_SIGNUP_URL_OVERRIDE || 'https://accounts.google.com/signup/v2/webcreateaccount',
+        selectorUpdateMode: process.env.GOOGLE_SELECTOR_UPDATE_MODE || 'manual', // auto | manual
+        debugMode: process.env.GOOGLE_DEBUG_MODE === 'true',
         signupDelay: {
             min: parseInt(process.env.GOOGLE_SIGNUP_DELAY_MIN) || 5000,
             max: parseInt(process.env.GOOGLE_SIGNUP_DELAY_MAX) || 15000
@@ -148,8 +150,18 @@ module.exports = {
 
     // SMS / Phone verification configuration
     sms: {
-        provider: process.env.SMS_PROVIDER || 'mock', // mock | twilio | (future: 5sim | sms-activate | smspool)
+        // Normalize provider: Twilio is disabled by policy (fallback to mock)
+        provider: (() => {
+            const prov = (process.env.SMS_PROVIDER || 'mock').toLowerCase();
+            return prov === 'twilio' ? 'mock' : prov;
+        })(),
         manualPhone: process.env.SMS_MANUAL_PHONE || '',
+        blacklistNumbers: (process.env.SMS_BLACKLIST || '+491732114133').split(',').map(s => s.trim()).filter(Boolean),
+
+        // Provider fallback and health checking
+        providerFallbackChain: (process.env.SMS_PROVIDER_FALLBACK_CHAIN || 'mock').split(',').map(p => p.trim()),
+        credentialValidationOnStartup: process.env.SMS_CREDENTIAL_VALIDATION_ON_STARTUP !== 'false',
+        healthCheckInterval: parseInt(process.env.SMS_PROVIDER_HEALTH_CHECK_INTERVAL) || 300000, // 5 minutes
 
         // Code input configuration for mock/manual flows
         codeInput: {
@@ -159,7 +171,7 @@ module.exports = {
             clearFileAfterRead: process.env.SMS_CODE_CLEAR_FILE === 'true'
         },
 
-        // Twilio provider configuration (polling-based)
+        // Legacy Twilio configuration retained for compatibility but not used
         twilio: {
             accountSid: process.env.TWILIO_ACCOUNT_SID || '',
             authToken: process.env.TWILIO_AUTH_TOKEN || '',
@@ -179,6 +191,9 @@ module.exports = {
         enabled: !!process.env.DOLPHIN_ANTY_HOST,
         host: process.env.DOLPHIN_ANTY_HOST || 'http://localhost:3001',
         token: process.env.DOLPHIN_ANTY_TOKEN,
+        apiVersion: process.env.DOLPHIN_ANTY_API_VERSION || 'auto', // v1.0, v2, auto
+        authHeaderType: process.env.DOLPHIN_ANTY_AUTH_HEADER_TYPE || 'auto', // bearer, x-auth-token, auto
+        fallbackEnabled: process.env.DOLPHIN_ANTY_FALLBACK_ENABLED !== 'false',
         timeout: 30000,
         maxProfiles: 50, // Free version limit
         profileCleanupDelay: 5000,
@@ -263,6 +278,9 @@ module.exports = {
         verboseLogging: process.env.VERBOSE_LOGGING === 'true',
         preserveUserData: process.env.PRESERVE_USER_DATA === 'true',
         mockExternalServices: process.env.MOCK_SERVICES === 'true',
+        capturePageStateOnError: process.env.CAPTURE_PAGE_STATE_ON_ERROR !== 'false',
+        selectorDiscoveryMode: process.env.SELECTOR_DISCOVERY_MODE === 'true',
+        apiCompatibilityTesting: process.env.API_COMPATIBILITY_TESTING === 'true',
 
         // Testing settings
         dryRun: process.env.DRY_RUN === 'true',
@@ -306,6 +324,9 @@ module.exports = {
         maxConsecutiveFailures: 5,
         failureThreshold: 0.3, // 30% failure rate threshold
         recoveryDelay: 60000, // 1 minute
+        delayEnforcement: process.env.ERROR_DELAY_ENFORCEMENT !== 'false',
+        maxConsecutiveGoogleFailures: parseInt(process.env.MAX_CONSECUTIVE_GOOGLE_FAILURES) || 3,
+        automaticSelectorRefresh: process.env.AUTOMATIC_SELECTOR_REFRESH === 'true',
         escalationLevels: [
             'retry',
             'rotate_proxy',
